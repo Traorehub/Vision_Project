@@ -1,0 +1,13 @@
+# Core dependencies
+
+torch==2.3.0+cu121
+torchvision==0.18.0+cu121
+ultralytics>=8.0
+opencv-python-headless>=4.9
+flask>=3.0
+numpy>=1.26
+Pillow>=10.0
+scikit-learn>=1.4
+tqdm>=4.66
+pytest
+facenet-pytorch>=2.5.0

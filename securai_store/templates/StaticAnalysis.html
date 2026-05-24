@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecurAI | Analyse Statique</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        :root {
+            --bg-base: #050505;
+            --bg-panel: rgba(15, 15, 20, 0.85);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --text-main: #f0f0f0;
+            --text-muted: #888;
+            --color-ok: #00E676;
+            --color-warn: #FFD600;
+            --color-danger: #FF1744;
+            --color-info: #00E5FF;
+            --font-ui: 'Rajdhani', sans-serif;
+            --font-data: 'JetBrains Mono', monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            font-family: var(--font-ui);
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            grid-template-rows: 60px 1fr;
+            grid-template-areas: 
+                "header header"
+                "main sidebar-right";
+            background-image: radial-gradient(circle at 50% 50%, #111 0%, #000 100%);
+        }
+
+        /* --- Header --- */
+        header {
+            grid-area: header;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(10px);
+            z-index: 10;
+        }
+        .logo { font-size: 1.8rem; font-weight: 700; letter-spacing: 2px; }
+        .logo span { color: var(--color-warn); }
+        .nav-link { color: var(--text-main); text-decoration: none; font-weight: 600; padding: 8px 16px; border: 1px solid var(--border-color); border-radius: 4px; transition: all 0.3s; }
+        .nav-link:hover { background: rgba(255,255,255,0.1); }
+
+        /* --- Panels --- */
+        .panel {
+            background: var(--bg-panel);
+            backdrop-filter: blur(20px);
+            border-left: 1px solid var(--border-color);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            overflow-y: auto;
+            z-index: 5;
+        }
+        .panel-right { grid-area: sidebar-right; }
+
+        .section-header {
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            letter-spacing: 2px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* --- Main View (Upload Area) --- */
+        .main-view {
+            grid-area: main;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+        
+        .upload-container {
+            width: 100%;
+            height: 100%;
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255,255,255,0.02);
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .upload-container.dragover {
+            border-color: var(--color-warn);
+            background: rgba(255, 214, 0, 0.05);
+        }
+
+        .upload-icon { font-size: 4rem; margin-bottom: 20px; color: var(--text-muted); }
+        .upload-text { font-size: 1.5rem; font-weight: 600; margin-bottom: 10px; }
+        .upload-subtext { color: var(--text-muted); font-family: var(--font-data); }
+        
+        #file-input { display: none; }
+        .btn-browse {
+            margin-top: 20px;
+            padding: 10px 24px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: var(--font-ui);
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-browse:hover { background: rgba(255,255,255,0.2); }
+
+        #preview-img {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: contain;
+            display: none;
+            background: #000;
+        }
+
+        /* --- Identity Card --- */
+        .identity-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border-color);
+            transition: all 0.3s;
+        }
+        .id-photo { width: 80px; height: 80px; border-radius: 50%; background: #222; margin-bottom: 15px; border: 3px solid #444; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; transition: all 0.3s; }
+        .id-name { font-size: 1.5rem; font-weight: 600; margin-bottom: 5px; }
+        .id-role { font-family: var(--font-data); font-size: 0.8rem; padding: 4px 12px; border-radius: 20px; background: #333; }
+
+        .status-granted .identity-box { border-color: rgba(0, 230, 118, 0.3); background: rgba(0, 230, 118, 0.05); }
+        .status-granted .id-photo { border-color: var(--color-ok); color: var(--color-ok); box-shadow: 0 0 20px rgba(0, 230, 118, 0.4); }
+        .status-granted .id-role { background: rgba(0, 230, 118, 0.2); color: var(--color-ok); border: 1px solid var(--color-ok); }
+
+        .status-partial .identity-box { border-color: rgba(255, 214, 0, 0.3); background: rgba(255, 214, 0, 0.05); }
+        .status-partial .id-photo { border-color: var(--color-warn); color: var(--color-warn); box-shadow: 0 0 20px rgba(255, 214, 0, 0.4); }
+        .status-partial .id-role { background: rgba(255, 214, 0, 0.2); color: var(--color-warn); border: 1px solid var(--color-warn); }
+
+        .status-denied .identity-box { border-color: rgba(255, 23, 68, 0.3); background: rgba(255, 23, 68, 0.05); }
+        .status-denied .id-photo { border-color: var(--color-danger); color: var(--color-danger); box-shadow: 0 0 20px rgba(255, 23, 68, 0.4); }
+        .status-denied .id-role { background: rgba(255, 23, 68, 0.2); color: var(--color-danger); border: 1px solid var(--color-danger); }
+
+        /* --- Metrics --- */
+        .metric-box { padding: 15px; background: rgba(255,255,255,0.02); border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 15px; }
+        .metric-value { font-family: var(--font-data); font-size: 1.5rem; margin-top: 5px; color: var(--text-main); }
+        
+        .alert-box { padding: 15px; border-radius: 6px; border: 1px solid #444; text-align: center; font-weight: bold; transition: all 0.3s; margin-bottom: 20px; }
+        .alert-box.danger { background: rgba(255, 23, 68, 0.2); border-color: var(--color-danger); color: var(--color-danger); animation: shake 0.5s; }
+        
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-5px); }
+            100% { transform: translateX(0); }
+        }
+
+        .bar-bg { height: 6px; background: #333; border-radius: 3px; overflow: hidden; margin-top: 10px; }
+        .bar-fill { height: 100%; background: var(--color-info); width: 0%; transition: width 0.3s; }
+        .bar-fill.high { background: var(--color-danger); }
+        
+        #loading { display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.8); z-index: 20; color: var(--color-warn); font-family: var(--font-data); font-size: 1.5rem; flex-direction: column; justify-content: center; align-items: center; }
+        .spinner { width: 50px; height: 50px; border: 4px solid rgba(255,214,0,0.2); border-top-color: var(--color-warn); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* --- Adversarial Glasses Panel --- */
+        .glasses-section {
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+        }
+        .glasses-icon-label {
+            font-size: 1.2rem; font-weight: 700;
+            color: var(--color-warn);
+            display: flex; align-items: center; gap: 8px;
+            margin-bottom: 14px;
+        }
+        .target-select {
+            width: 100%; padding: 8px 12px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-main);
+            font-family: var(--font-data);
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+            cursor: pointer;
+        }
+        .target-select:focus { outline: none; border-color: var(--color-warn); }
+        .btn-glasses {
+            width: 100%; padding: 11px;
+            background: linear-gradient(135deg, rgba(255,214,0,0.15), rgba(255,214,0,0.05));
+            border: 1px solid var(--color-warn);
+            border-radius: 6px;
+            color: var(--color-warn);
+            font-family: var(--font-ui);
+            font-size: 1rem; font-weight: 700;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.25s;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .btn-glasses:hover:not(:disabled) {
+            background: rgba(255,214,0,0.25);
+            box-shadow: 0 0 18px rgba(255,214,0,0.3);
+        }
+        .btn-glasses:disabled { opacity: 0.4; cursor: not-allowed; }
+        .comparison-grid {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 8px; margin-top: 14px;
+        }
+        .comp-col { display: flex; flex-direction: column; gap: 6px; }
+        .comp-col-label {
+            text-align: center; font-size: 0.75rem;
+            color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;
+        }
+        .comp-img {
+            width: 100%; border-radius: 6px;
+            border: 1px solid var(--border-color);
+            object-fit: cover; aspect-ratio: 1;
+            display: none; background: #111;
+        }
+        .comp-score {
+            text-align: center;
+            font-family: var(--font-data); font-size: 0.8rem;
+        }
+        .comp-score span { display: block; font-size: 1rem; font-weight: 700; }
+        .attack-result-banner {
+            margin-top: 12px; padding: 10px;
+            border-radius: 6px; text-align: center;
+            font-weight: 700; font-size: 0.95rem;
+            display: none;
+        }
+        .attack-result-banner.success {
+            background: rgba(0,230,118,0.1); border: 1px solid var(--color-ok);
+            color: var(--color-ok);
+        }
+        .attack-result-banner.fail {
+            background: rgba(255,23,68,0.1); border: 1px solid var(--color-danger);
+            color: var(--color-danger);
+        }
+        .spinner-sm {
+            width: 16px; height: 16px;
+            border: 2px solid rgba(255,214,0,0.3);
+            border-top-color: var(--color-warn);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">SECUR<span>AI</span> // POC STATIQUE</div>
+        <a href="/" class="nav-link">← Retour Live Video</a>
+    </header>
+
+    <!-- MAIN VIEW -->
+    <div class="main-view">
+        <div class="upload-container" id="drop-zone">
+            <div id="upload-content" style="text-align: center;">
+                <div class="upload-icon">📂</div>
+                <div class="upload-text">Glisser-déposer une image ici</div>
+                <div class="upload-subtext">JPG, PNG supportés</div>
+                <button class="btn-browse" onclick="document.getElementById('file-input').click()">Parcourir</button>
+            </div>
+            <input type="file" id="file-input" accept="image/*">
+            <img id="preview-img" src="" alt="Aperçu" onclick="document.getElementById('file-input').click()" style="cursor: pointer;" title="Cliquer pour analyser une autre image">
+            <div id="loading"><div class="spinner"></div>ANALYSE EN COURS...</div>
+        </div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="panel panel-right" id="panel-right">
+        <div>
+            <div class="section-header">Résultat d'Identification</div>
+            <div class="identity-box">
+                <div class="id-photo" id="id-photo">👤</div>
+                <div class="id-name" id="ui-name">EN ATTENTE</div>
+                <div class="id-role" id="ui-access-level">UPLOAD REQUIS</div>
+                <div style="font-family: var(--font-data); font-size: 0.8rem; margin-top: 10px; color: var(--text-muted);">
+                    SIMILARITÉ: <span id="ui-conf" style="color: var(--text-main);">0%</span>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <div class="section-header">Détection Anti-Spoofing (FFT)</div>
+            <div class="alert-box" id="anomaly-alert">EN ATTENTE</div>
+            <div class="metric-box">
+                <div style="font-size: 0.8rem; color: var(--text-muted);">Score de Haute Fréquence</div>
+                <div class="metric-value" id="anomaly-score-text">0.00</div>
+                <div class="bar-bg">
+                    <div class="bar-fill" id="anomaly-bar"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ADVERSARIAL GLASSES SECTION -->
+        <div class="glasses-section">
+            <div class="glasses-icon-label">🕶️ Lunettes Adversariales</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px;">
+                Génère un patch en forme de lunettes pour usurper l'identité de la cible.
+            </div>
+
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Identité Cible</div>
+            <select id="glasses-target" class="target-select">
+                <option value="Manager_Demo">Manager_Demo (Admin)</option>
+                <option value="Employee_Demo">Employee_Demo (Employé)</option>
+            </select>
+
+            <button id="btn-glasses-attack" class="btn-glasses" disabled title="Uploadez une image d'abord">
+                🕶️ GÉNÉRER L'ATTAQUE
+            </button>
+
+            <!-- Comparaison Avant/Après -->
+            <div class="comparison-grid" id="glasses-comparison" style="display:none;">
+                <div class="comp-col">
+                    <div class="comp-col-label">Avant</div>
+                    <img id="comp-before" class="comp-img" alt="Avant">
+                    <div class="comp-score">
+                        <span id="score-before" style="color:var(--text-muted);">—</span>
+                        <div style="color:var(--text-muted);font-size:0.7rem;">Identifié</div>
+                    </div>
+                </div>
+                <div class="comp-col">
+                    <div class="comp-col-label">Après</div>
+                    <img id="comp-after" class="comp-img" alt="Après">
+                    <div class="comp-score">
+                        <span id="score-after" style="color:var(--color-warn);">—</span>
+                        <div style="color:var(--text-muted);font-size:0.7rem;">Identifié</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="attack-result-banner" class="attack-result-banner"></div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone      = document.getElementById('drop-zone');
+        const fileInput     = document.getElementById('file-input');
+        const previewImg    = document.getElementById('preview-img');
+        const uploadContent = document.getElementById('upload-content');
+        const loading       = document.getElementById('loading');
+        const panelRight    = document.getElementById('panel-right');
+
+        // --- Drag and Drop events ---
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev =>
+            dropZone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); }));
+        ['dragenter', 'dragover'].forEach(ev =>
+            dropZone.addEventListener(ev, () => dropZone.classList.add('dragover')));
+        ['dragleave', 'drop'].forEach(ev =>
+            dropZone.addEventListener(ev, () => dropZone.classList.remove('dragover')));
+        dropZone.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+        fileInput.addEventListener('change', function () { handleFiles(this.files); });
+
+        // --- État global ---
+        let currentFile = null;
+        let currentBeforeB64 = null;
+
+        function handleFiles(files) {
+            if (files.length > 0 && files[0].type.startsWith('image/')) {
+                currentFile = files[0];
+                const reader = new FileReader();
+                reader.onload = e => {
+                    previewImg.src = e.target.result;
+                    previewImg.style.display = 'block';
+                    uploadContent.style.display = 'none';
+                    currentBeforeB64 = e.target.result;
+                };
+                reader.readAsDataURL(currentFile);
+
+                // Activer le bouton lunettes
+                document.getElementById('btn-glasses-attack').disabled = false;
+
+                // Réinitialiser la comparaison
+                resetComparison();
+
+                uploadFile(currentFile);
+            }
+        }
+
+        async function uploadFile(file) {
+            loading.style.display = 'flex';
+            const formData = new FormData();
+            formData.append('image', file);
+            try {
+                const response = await fetch('/api/analyze_static', { method: 'POST', body: formData });
+                const data = await response.json();
+                loading.style.display = 'none';
+                if (data.success) updateUI(data.results);
+                else alert('Erreur: ' + data.error);
+            } catch (err) {
+                loading.style.display = 'none';
+                alert('Erreur réseau lors de l\'analyse.');
+            }
+        }
+
+        // --- Adversarial Glasses Attack ---
+        const btnGlasses = document.getElementById('btn-glasses-attack');
+
+        btnGlasses.addEventListener('click', async () => {
+            if (!currentFile) return;
+
+            const targetName = document.getElementById('glasses-target').value;
+
+            // Spinner dans le bouton
+            btnGlasses.disabled = true;
+            btnGlasses.innerHTML = '<div class="spinner-sm"></div> CALCUL EN COURS...';
+
+            const formData = new FormData();
+            formData.append('image', currentFile);
+            formData.append('target', targetName);
+
+            try {
+                const resp = await fetch('/api/generate_glasses_attack', { method: 'POST', body: formData });
+                const data = await resp.json();
+
+                btnGlasses.innerHTML = '🕶️ GÉNÉRER L\'ATTAQUE';
+                btnGlasses.disabled = false;
+
+                if (!data.success) {
+                    alert('Erreur attaque: ' + data.error);
+                    return;
+                }
+
+                // Afficher la comparaison
+                const comparison = document.getElementById('glasses-comparison');
+                comparison.style.display = 'grid';
+
+                // Image AVANT (snapshot local)
+                const imgBefore = document.getElementById('comp-before');
+                imgBefore.src = currentBeforeB64;
+                imgBefore.style.display = 'block';
+
+                // Image APRÈS (retournée par l'API)
+                const imgAfter = document.getElementById('comp-after');
+                imgAfter.src = 'data:image/jpeg;base64,' + data.after.image_base64;
+                imgAfter.style.display = 'block';
+
+                // Remplacer la preview principale par l'image attaquée
+                previewImg.src = imgAfter.src;
+
+                // Scores
+                const scorePct_before = (data.before.confidence * 100).toFixed(1);
+                const scorePct_after  = (data.after.confidence  * 100).toFixed(1);
+                document.getElementById('score-before').innerText =
+                    `${data.before.identity} ${scorePct_before}%`;
+                document.getElementById('score-after').innerText =
+                    `${data.after.identity} ${scorePct_after}%`;
+
+                // Bannière résultat
+                const banner = document.getElementById('attack-result-banner');
+                banner.style.display = 'block';
+                const success = data.after.identity === targetName;
+                banner.className = 'attack-result-banner ' + (success ? 'success' : 'fail');
+                if (success) {
+                    banner.innerText = `✅ SPOOFING RÉUSSI ! Identifié comme ${targetName} (${scorePct_after}%)`;
+                    // Mettre à jour le panneau d'identité principal
+                    updateUI(Object.assign({}, data.after));
+                } else {
+                    banner.innerText = `❌ Attaque insuffisante — Toujours identifié: ${data.after.identity} (${scorePct_after}%)`;
+                }
+
+            } catch (err) {
+                btnGlasses.innerHTML = '🕶️ GÉNÉRER L\'ATTAQUE';
+                btnGlasses.disabled = false;
+                alert('Erreur réseau lors de l\'attaque: ' + err);
+            }
+        });
+
+        function resetComparison() {
+            document.getElementById('glasses-comparison').style.display = 'none';
+            document.getElementById('comp-before').style.display = 'none';
+            document.getElementById('comp-after').style.display = 'none';
+            document.getElementById('attack-result-banner').style.display = 'none';
+            document.getElementById('score-before').innerText = '—';
+            document.getElementById('score-after').innerText = '—';
+        }
+
+        // --- Mise à jour UI principale ---
+        function updateUI(res) {
+            if (res.image_base64) {
+                previewImg.src = 'data:image/jpeg;base64,' + res.image_base64;
+            }
+            const idName = (res.identity !== 'Inconnu' && res.identity !== 'Aucun visage')
+                ? res.identity : 'INCONNU';
+            document.getElementById('ui-name').innerText = idName.toUpperCase();
+            document.getElementById('ui-conf').innerText = `${(res.confidence * 100).toFixed(1)}%`;
+            document.getElementById('ui-access-level').innerText = res.access_level;
+
+            panelRight.className = 'panel panel-right';
+            if (res.identity === 'Aucun visage') {
+                document.getElementById('id-photo').innerText = '❓';
+            } else if (idName !== 'INCONNU') {
+                if (res.access_level === 'ADMIN') {
+                    panelRight.classList.add('status-granted');
+                    document.getElementById('id-photo').innerText = '✓';
+                } else if (res.access_level === 'EMPLOYEE') {
+                    panelRight.classList.add('status-partial');
+                    document.getElementById('id-photo').innerText = '🔑';
+                } else {
+                    panelRight.classList.add('status-denied');
+                    document.getElementById('id-photo').innerText = '✗';
+                }
+            } else {
+                panelRight.classList.add('status-denied');
+                document.getElementById('id-photo').innerText = '👤';
+            }
+
+            const anomAlert = document.getElementById('anomaly-alert');
+            const anomBar   = document.getElementById('anomaly-bar');
+            if (res.identity === 'Aucun visage') {
+                anomAlert.className = 'alert-box';
+                anomAlert.innerText = 'AUCUN VISAGE À ANALYSER';
+                anomBar.style.width = '0%';
+                document.getElementById('anomaly-score-text').innerText = '0.00';
+            } else if (res.anomaly_detected) {
+                anomAlert.className = 'alert-box danger';
+                anomAlert.innerText = '⚠️ SPOOFING DÉTECTÉ (FFT)';
+                anomBar.classList.add('high');
+            } else {
+                anomAlert.className = 'alert-box';
+                anomAlert.innerText = 'IMAGE INTÈGRE';
+                anomBar.classList.remove('high');
+            }
+            const scoreVal = (res.anomaly_score || 0).toFixed(3);
+            document.getElementById('anomaly-score-text').innerText = scoreVal;
+            document.getElementById('anomaly-bar').style.width = `${Math.min(scoreVal * 100, 100)}%`;
+        }
+    </script>
+    </body>
+</html>
