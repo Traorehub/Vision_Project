@@ -15,7 +15,7 @@ from modules.patch_attacker  import PatchAttacker
 from modules.defender        import Defender
 from modules.anomaly_detector import AnomalyDetector
 from rights_manager import RightsManager
-from paths import BASE_DIR, MODELS_DIR, ENROLLED_DIR, AUDIT_LOG
+from paths import BASE_DIR, MODELS_DIR, ENROLLED_DIR, AUDIT_LOG, read_audit_log_lines
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
@@ -56,9 +56,13 @@ class SystemState:
     anomaly_score:    float = 0.0
     attack_active:    bool  = False
     model_mode:       str   = "standard"
+    defense_type:     str   = "gaussian"
     fps:              int   = 0
     confidence:       float = 0.0
     latest_frame:     bytes = None
+    strict_block:     bool  = False
+    fgsm_epsilon:     float = 0.15
+    perturbation_heatmap: bytes = None
 
 state      = SystemState()
 state_lock = threading.Lock()
@@ -166,7 +170,7 @@ def send_to_hf_infer(face_crop: np.ndarray) -> dict | None:
         return None
 
 
-def send_to_hf_fgsm(face_crop: np.ndarray, target: str = "Manager_Demo") -> np.ndarray | None:
+def send_to_hf_fgsm(face_crop: np.ndarray, target: str = "Manager_Demo", epsilon: float = 0.15) -> np.ndarray | None:
     """
     Envoie un crop vers HF /fgsm pour calcul FGSM sur GPU.
     Retourne le crop attaqué (ndarray BGR) ou None si erreur.
@@ -179,7 +183,7 @@ def send_to_hf_fgsm(face_crop: np.ndarray, target: str = "Manager_Demo") -> np.n
         t0   = time.time()
         resp = hf_session.post(
             HF_FGSM_URL,
-            json={"image": _encode_b64(face_crop), "target": target},
+            json={"image": _encode_b64(face_crop), "target": target, "epsilon": epsilon},
             timeout=20
         )
         ms = int((time.time() - t0) * 1000)
@@ -270,6 +274,7 @@ def _video_thread():
         with state_lock:
             attack_active = state.attack_active
             current_mode  = state.model_mode
+            active_defense_type = state.defense_type
 
         bboxes      = face_detector.detect(frame)
         is_attacked = False
@@ -282,23 +287,51 @@ def _video_thread():
             if face_crop is not None:
                 # FGSM déporté sur HF (toutes les FRAME_SKIP frames)
                 if attack_active and frame_count % FRAME_SKIP == 0:
-                    attacked = send_to_hf_fgsm(face_crop)
+                    clean_crop = face_crop.copy()
+                    with state_lock:
+                        eps = state.fgsm_epsilon
+                    attacked = send_to_hf_fgsm(face_crop, epsilon=eps)
                     if attacked is not None:
+                        heatmap = FGSMAttacker.perturbation_heatmap(clean_crop, attacked)
+                        if heatmap is not None:
+                            ok_hm, buf_hm = cv2.imencode('.jpg', heatmap)
+                            if ok_hm:
+                                with state_lock:
+                                    state.perturbation_heatmap = buf_hm.tobytes()
                         face_crop = attacked
+                elif not attack_active:
+                    with state_lock:
+                        state.perturbation_heatmap = None
 
                 # Défense locale si mode durci
                 if current_mode == 'hardened':
-                    face_crop = defender.apply_defense(face_crop, defense_type='gaussian')
+                    face_crop = defender.apply_defense(face_crop, defense_type=active_defense_type, face_recognizer=face_recognizer)
 
                 # Anomalie FFT local (~2ms)
                 is_attacked, anom_score = anomaly_detector.analyze(face_crop)
 
                 # Envoyer vers HF sans bloquer
                 if frame_count % FRAME_SKIP == 0:
-                    try:
-                        hf_queue.put_nowait(face_crop)
-                    except queue.Full:
-                        pass  # on drop, pas de blocage
+                    if current_mode == 'hardened' and getattr(defender, 'attack_detected', False):
+                        is_attacked = True
+                        if active_defense_type in ('neural_lr_reject', 'neural_cnn_reject'):
+                            with state_lock:
+                                state.identity     = "Inconnu"
+                                state.confidence   = 0.0
+                                state.access_level = "DENIED"
+                                state.permissions  = rights_manager.get_permissions("Inconnu")
+                            logging.info("[DEFENSE NEURALE] ⚠️ Attaque détectée et bloquée (Stricte) ! Accès refusé.")
+                        else:
+                            try:
+                                hf_queue.put_nowait(face_crop)
+                            except queue.Full:
+                                pass
+                            logging.info("[DEFENSE NEURALE] ⚠️ Attaque détectée et nettoyée. Envoi au serveur HF.")
+                    else:
+                        try:
+                            hf_queue.put_nowait(face_crop)
+                        except queue.Full:
+                            pass  # on drop, pas de blocage
 
             # Overlay
             with state_lock:
@@ -357,9 +390,20 @@ def get_status():
             'anomaly_score':    round(state.anomaly_score, 4),
             'attack_active':    state.attack_active,
             'model_mode':       state.model_mode,
+            'defense_type':     state.defense_type,
             'fps':              state.fps,
             'confidence':       round(state.confidence, 4),
+            'strict_block':     state.strict_block,
+            'fgsm_epsilon':     round(state.fgsm_epsilon, 3),
         })
+
+@app.route('/api/audit_logs')
+def get_audit_logs():
+    try:
+        return jsonify({"success": True, "logs": read_audit_log_lines(100)})
+    except Exception as e:
+        logging.error(f"audit_logs: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/toggle_attack', methods=['POST'])
 def toggle_attack():
@@ -368,9 +412,38 @@ def toggle_attack():
         return jsonify({"success": False, "error": "Parametre 'active' manquant."}), 400
     with state_lock:
         state.attack_active = bool(data['active'])
+        if not data['active']:
+            state.perturbation_heatmap = None
     status = "activée" if data['active'] else "désactivée"
     logging.info(f"Attaque {status}")
     return jsonify({"success": True, "message": f"Attaque {status}."})
+
+
+@app.route('/api/perturbation_heatmap')
+def get_perturbation_heatmap():
+    with state_lock:
+        data = state.perturbation_heatmap
+    if not data:
+        return '', 204
+    return Response(data, mimetype='image/jpeg')
+
+
+@app.route('/api/set_fgsm_epsilon', methods=['POST'])
+def set_fgsm_epsilon():
+    data = request.json or {}
+    try:
+        epsilon = float(data.get('epsilon', 0.15))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "epsilon invalide"}), 400
+    epsilon = max(0.0, min(0.30, epsilon))
+    with state_lock:
+        state.fgsm_epsilon = epsilon
+    fgsm_attacker.epsilon = epsilon
+    with state_lock:
+        state.perturbation_heatmap = None
+    logging.info(f"FGSM epsilon -> {epsilon}")
+    return jsonify({"success": True, "epsilon": epsilon})
+
 
 @app.route('/api/toggle_mode', methods=['POST'])
 def toggle_mode():
@@ -386,6 +459,28 @@ def toggle_mode():
         return jsonify({"success": True, "message": f"Mode -> {mode}"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/toggle_strict_block', methods=['POST'])
+def toggle_strict_block():
+    data = request.json or {}
+    active = data.get('active', False)
+    with state_lock:
+        state.strict_block = active
+    status = "activé" if active else "désactivé"
+    logging.info(f"Rejecteur d'attaque {status}")
+    return jsonify({"success": True, "message": f"Rejecteur d'attaque {status}."})
+
+@app.route('/api/set_defense_type', methods=['POST'])
+def set_defense_type():
+    data = request.json or {}
+    defense_type = data.get('defense_type', '')
+    allowed = ('none', 'clean_pipeline', 'neural_lr_recover', 'neural_lr_reject', 'neural_cnn_recover', 'neural_cnn_reject')
+    if defense_type not in allowed:
+        return jsonify({"success": False, "error": f"Type de défense invalide. Choix possibles: {allowed}"}), 400
+    with state_lock:
+        state.defense_type = defense_type
+    logging.info(f"Type de défense configuré : {defense_type}")
+    return jsonify({"success": True, "message": f"Défense configurée à : {defense_type}"})
 
 @app.route('/api/enroll', methods=['POST'])
 def enroll():

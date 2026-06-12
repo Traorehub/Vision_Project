@@ -53,8 +53,16 @@
         }
         .logo { font-size: 1.8rem; font-weight: 700; letter-spacing: 2px; }
         .logo span { color: var(--color-warn); }
-        .nav-link { color: var(--text-main); text-decoration: none; font-weight: 600; padding: 8px 16px; border: 1px solid var(--border-color); border-radius: 4px; transition: all 0.3s; }
-        .nav-link:hover { background: rgba(255,255,255,0.1); }
+        .nav-links { display: flex; gap: 12px; align-items: center; }
+        .nav-link {
+            color: var(--text-muted); text-decoration: none;
+            font-size: 0.85rem; font-weight: 600; letter-spacing: 1px;
+            padding: 6px 14px; border: 1px solid var(--border-color);
+            border-radius: 4px; transition: all 0.2s;
+            font-family: var(--font-ui);
+        }
+        .nav-link:hover { color: var(--text-main); background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.2); }
+        .nav-link.active { color: var(--color-warn); border-color: var(--color-warn); background: rgba(255,214,0,0.1); }
 
         /* --- Panels --- */
         .panel {
@@ -277,8 +285,15 @@
 <body>
 
     <header>
-        <div class="logo">SECUR<span>AI</span> // POC STATIQUE</div>
-        <a href="/" class="nav-link">← Retour Live Video</a>
+        <div class="logo">SECUR<span>AI</span></div>
+        <nav class="nav-links">
+            <a href="/" class="nav-link">🎥 Live Feed</a>
+            <a href="/static_analysis" class="nav-link active">🔍 Analyse Statique</a>
+            <a href="/glasses_attack" class="nav-link">🕶️ Attaque Lunettes</a>
+        </nav>
+        <div style="font-family: var(--font-data); font-size: 0.9rem; color: var(--color-ok); display: flex; align-items: center; gap: 8px;">
+            SYSTEM ONLINE
+        </div>
     </header>
 
     <!-- MAIN VIEW -->

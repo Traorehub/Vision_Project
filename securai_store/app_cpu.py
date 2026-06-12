@@ -1,16 +1,13 @@
 """
-Backend Flask — SecurAI Store (MODE GPU LOCAL)
-Inférence FaceNet + FGSM + patch lunettes sur CUDA (RTX 4050, etc.).
-Même interface et APIs que app_cpu.py — lancer avec :
-    python app_gpu_direct.py
-Prérequis : torch+cu121 (voir requirements_fianl.txt à la racine du repo).
+Backend Flask — SecurAI Store (MODE CPU LOCAL)
+Toute l'inférence tourne sur le CPU local.
+Aucun appel réseau pendant la démo.
+FPS attendu : 10-20 FPS selon le CPU.
 """
 import os, cv2, time, numpy as np, threading, base64, logging, queue
 from dataclasses import dataclass, field
 from flask import Flask, Response, request, jsonify, render_template
 from werkzeug.utils import secure_filename
-
-import torch
 
 from modules.face_detector    import FaceDetector
 from modules.face_recognizer  import FaceRecognizer
@@ -22,14 +19,12 @@ from rights_manager import RightsManager
 from paths import BASE_DIR, MODELS_DIR, ENROLLED_DIR, AUDIT_LOG, read_audit_log_lines
 
 # ─────────────────────────────────────────────
-# CONFIG GPU
+# CONFIG
 # ─────────────────────────────────────────────
 FACE_CROP_SIZE  = 160
-FGSM_SKIP       = 2     # GPU : FGSM plus rapide qu'en CPU
-DETECT_SKIP     = 1     # détection YOLO chaque frame (GPU)
+FGSM_SKIP       = 5     # calcule FGSM 1 frame sur 5 (lourd sur CPU)
+DETECT_SKIP     = 2     # détecte 1 frame sur 2 (YOLO)
 DEBUG           = True
-GPU_DEVICE      = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-RUN_MODE        = "GPU_LOCAL" if GPU_DEVICE.type == "cuda" else "GPU_FALLBACK_CPU"
 
 app = Flask(__name__)
 os.makedirs(ENROLLED_DIR, exist_ok=True)
@@ -42,7 +37,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
-logging.info(f"SecurAI {RUN_MODE} démarré — device={GPU_DEVICE}")
+logging.info("SecurAI CPU mode démarré.")
 
 def dbg(msg):
     if DEBUG:
@@ -83,14 +78,8 @@ state_lock = threading.Lock()
 # INITIALISATION MODULES
 # ─────────────────────────────────────────────
 print("\n══════════════════════════════════════")
-print("  SecurAI — MODE GPU LOCAL")
+print("  SecurAI — MODE CPU LOCAL")
 print("══════════════════════════════════════")
-if GPU_DEVICE.type == "cuda":
-    print(f"  GPU : {torch.cuda.get_device_name(0)}")
-    vram = torch.cuda.get_device_properties(0).total_memory // (1024 ** 2)
-    print(f"  VRAM: {vram} Mo")
-else:
-    print("  ⚠️  CUDA indisponible — fallback CPU (installer torch+cu121)")
 print("[INIT] Chargement des modules IA...")
 
 face_detector    = FaceDetector()
@@ -124,9 +113,9 @@ for filename in os.listdir(ENROLLED_DIR):
 print(f"[INIT] {enrolled_count} identité(s) enrôlée(s).")
 
 # ─────────────────────────────────────────────
-# BENCHMARK GPU AU DÉMARRAGE
+# BENCHMARK CPU AU DÉMARRAGE
 # ─────────────────────────────────────────────
-print(f"\n[BENCHMARK] Test vitesse ({GPU_DEVICE})...")
+print("\n[BENCHMARK] Test vitesse CPU...")
 dummy = np.zeros((160, 160, 3), dtype=np.uint8)
 
 # Test inférence
@@ -147,7 +136,6 @@ for _ in range(3):
 avg_fgsm = sum(times_fgsm)/len(times_fgsm)
 print(f"  Calcul FGSM      : {avg_fgsm:.0f}ms/calcul")
 print(f"  FGSM skip={FGSM_SKIP} → impact réel : {avg_fgsm/FGSM_SKIP:.0f}ms/frame")
-print(f"  Mode : {RUN_MODE}")
 print("══════════════════════════════════════\n")
 
 print("[READY] Modules prêts — lancement serveur Flask...")
@@ -171,7 +159,7 @@ def _fgsm_worker():
             target_emb = face_recognizer.enrolled_embeddings.get('Manager_Demo')
             attacked  = fgsm_attacker.attack(face_crop, target_emb, epsilon=epsilon)
             ms        = int((time.time()-t0)*1000)
-            dbg(f"[FGSM GPU] {ms}ms")
+            dbg(f"[FGSM LOCAL] {ms}ms")
             with fgsm_result_lock:
                 fgsm_last_crop[0] = attacked
                 fgsm_last_clean[0] = face_crop.copy()
@@ -315,7 +303,7 @@ def _video_thread():
                 is_denoised    = (active_defense_type in ('clean_pipeline', 'neural_lr_recover', 'neural_cnn_recover'))
                 identity, conf = face_recognizer.predict(face_crop, is_denoised=is_denoised)
                 infer_ms       = int((time.time()-t0)*1000)
-                dbg(f"[INFER GPU] {identity} | conf={conf:.2f} | {infer_ms}ms")
+                dbg(f"[INFER LOCAL] {identity} | conf={conf:.2f} | {infer_ms}ms")
 
                 # Si la défense neuronale a détecté une attaque active, on marque l'anomalie
                 if current_mode == 'hardened' and getattr(defender, 'attack_detected', False):
@@ -349,9 +337,8 @@ def _video_thread():
                     fps_val  = state.fps
                     fgsm_val = state.fgsm_ms
                 mode_label = "ATK" if attack_active else ("HRD" if current_mode=='hardened' else "STD")
-                gpu_tag = "GPU" if GPU_DEVICE.type == "cuda" else "CPU"
                 cv2.putText(frame,
-                            f"FPS:{fps_val} INFER:{infer_ms}ms FGSM:{fgsm_val:.0f}ms [{gpu_tag}/{mode_label}]",
+                            f"FPS:{fps_val} INFER:{infer_ms}ms FGSM:{fgsm_val:.0f}ms [{mode_label}]",
                             (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
                             (0, 255, 255), 1)
 
@@ -410,8 +397,7 @@ def get_status():
             'fgsm_ms':          state.fgsm_ms,
             'fgsm_epsilon':     round(state.fgsm_epsilon, 3),
             'strict_block':     state.strict_block,
-            'mode':             RUN_MODE,
-            'device':           str(GPU_DEVICE),
+            'mode':             'CPU_LOCAL'
         })
 
 @app.route('/api/audit_logs')
@@ -426,8 +412,7 @@ def get_audit_logs():
 def debug_info():
     with state_lock:
         return jsonify({
-            'mode':             RUN_MODE,
-            'device':           str(GPU_DEVICE),
+            'mode':             'CPU_LOCAL',
             'fps':              state.fps,
             'infer_ms':         state.infer_ms,
             'fgsm_ms':          state.fgsm_ms,
@@ -795,5 +780,4 @@ def toggle_patch_live():
 
 
 if __name__ == '__main__':
-    print(f"[READY] SecurAI {RUN_MODE} — http://127.0.0.1:5000")
     app.run(host='0.0.0.0', port=5000, threaded=True)

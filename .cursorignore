@@ -1,0 +1,47 @@
+# Cursor Ignore File - Prevent indexing large, binary, and virtualenv files
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.git/
+.github/
+.vscode/
+.idea/
+
+# Model Weights and Large Assets
+*.pt
+*.pth
+*.onnx
+*.weights
+*.bin
+*.model
+
+# Media files
+*.mp4
+*.avi
+*.mkv
+*.mov
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.svg
+*.ico
+
+# Data and cached datasets
+data/
+securai_store/data/
+securai_store/feature_lunettes/
+temp/
+tmp/
+logs/
+*.log
+
+# Node dependencies (if any)
+node_modules/
+dist/
+build/

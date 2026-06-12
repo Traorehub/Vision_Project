@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SecurAI | Poste de Contrôle</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
 
@@ -207,6 +208,109 @@
         .btn-defense:hover { background: rgba(0, 229, 255, 0.2); box-shadow: 0 0 15px rgba(0, 229, 255, 0.3); }
         .btn-defense.active { background: var(--color-info); color: #000; box-shadow: 0 0 20px rgba(0, 229, 255, 0.5); }
 
+        /* --- FGSM Epsilon Slider --- */
+        .epsilon-control {
+            margin-bottom: 20px;
+            padding: 12px 14px;
+            background: rgba(255, 23, 68, 0.05);
+            border: 1px solid rgba(255, 23, 68, 0.2);
+            border-radius: 8px;
+        }
+        .epsilon-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+        .epsilon-value {
+            font-family: var(--font-data);
+            color: var(--color-danger);
+            font-size: 1rem;
+            font-weight: 700;
+        }
+        #epsilon-slider {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            outline: none;
+            cursor: pointer;
+        }
+        #epsilon-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--color-danger);
+            box-shadow: 0 0 10px rgba(255, 23, 68, 0.6);
+        }
+        #epsilon-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--color-danger);
+            border: none;
+            box-shadow: 0 0 10px rgba(255, 23, 68, 0.6);
+        }
+        .epsilon-hints {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+            font-family: var(--font-data);
+        }
+
+        .heatmap-block {
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 23, 68, 0.15);
+        }
+        .heatmap-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        .heatmap-preview {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 23, 68, 0.25);
+            background: rgba(0, 0, 0, 0.4);
+            object-fit: cover;
+            display: none;
+        }
+        .heatmap-placeholder {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 8px;
+            border: 1px dashed rgba(255, 255, 255, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            padding: 12px;
+            line-height: 1.4;
+        }
+        .heatmap-legend {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+            font-family: var(--font-data);
+        }
+
         /* --- Metrics --- */
         .metric-box { padding: 15px; background: rgba(255,255,255,0.02); border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 15px; }
         .metric-value { font-family: var(--font-data); font-size: 1.5rem; margin-top: 5px; color: var(--text-main); }
@@ -238,17 +342,99 @@
         .log-item { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--text-muted); display: flex; gap: 10px; }
         .log-time { color: var(--color-info); }
 
+        .defense-opt-btn {
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: var(--font-ui);
+            font-size: 0.9rem;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s;
+            font-weight: 600;
+            width: 100%;
+            margin-bottom: 4px;
+        }
+        .defense-opt-btn:hover {
+            background: rgba(0, 229, 255, 0.05);
+            color: var(--text-main);
+            border-color: rgba(0, 229, 255, 0.3);
+        }
+        .defense-opt-btn.active {
+            background: rgba(0, 229, 255, 0.15);
+            color: var(--color-info);
+            border-color: var(--color-info);
+            box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+        }
+
+        .control-btn.btn-danger {
+            background: linear-gradient(135deg, rgba(220, 53, 69, 0.1), rgba(220, 53, 69, 0.15));
+            color: #ff4a5a;
+            border-color: rgba(220, 53, 69, 0.3);
+        }
+        .control-btn.btn-danger:hover {
+            background: linear-gradient(135deg, rgba(220, 53, 69, 0.25), rgba(220, 53, 69, 0.3));
+            border-color: #ff4a5a;
+            box-shadow: 0 0 15px rgba(220, 53, 69, 0.3);
+        }
+        .control-btn.btn-danger.active {
+            background: linear-gradient(135deg, rgba(220, 53, 69, 0.5), rgba(220, 53, 69, 0.6));
+            color: #FFFFFF;
+            border-color: #dc3545;
+            box-shadow: 0 0 20px rgba(220, 53, 69, 0.5);
+            text-shadow: 0 0 5px #000;
+        }
+
+        .btn-export-pdf {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 10px 14px;
+            font-family: var(--font-data);
+            font-size: 0.85rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--color-info);
+            background: rgba(0, 229, 255, 0.08);
+            border: 1px solid rgba(0, 229, 255, 0.45);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-export-pdf:hover {
+            background: rgba(0, 229, 255, 0.18);
+            box-shadow: 0 0 12px rgba(0, 229, 255, 0.25);
+        }
+        .btn-export-pdf:disabled {
+            opacity: 0.5;
+            cursor: wait;
+        }
+
+        .nav-links { display: flex; gap: 12px; align-items: center; }
+        .nav-link {
+            color: var(--text-muted); text-decoration: none;
+            font-size: 0.85rem; font-weight: 600; letter-spacing: 1px;
+            padding: 6px 14px; border: 1px solid var(--border-color);
+            border-radius: 4px; transition: all 0.2s;
+            font-family: var(--font-ui);
+        }
+        .nav-link:hover { color: var(--text-main); background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.2); }
+        .nav-link.active { color: var(--color-info); border-color: var(--color-info); background: rgba(0,229,255,0.1); }
+
     </style>
 </head>
 <body>
 
     <header>
         <div class="logo">SECUR<span>AI</span></div>
-        <div style="display: flex; gap: 20px; align-items: center;">
-            <a href="/static_analysis" style="color: var(--text-main); text-decoration: none; font-weight: 600; padding: 6px 12px; border: 1px solid var(--border-color); border-radius: 4px; transition: all 0.3s; font-size: 0.9rem;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='transparent'">🔍 Analyse Statique</a>
-            <div class="sys-status">
-                <div class="pulse"></div> SYSTEM ONLINE
-            </div>
+        <nav class="nav-links">
+            <a href="/" class="nav-link active">🎥 Live Feed</a>
+            <a href="/static_analysis" class="nav-link">🔍 Analyse Statique</a>
+            <a href="/glasses_attack" class="nav-link">🕶️ Attaque Lunettes</a>
+        </nav>
+        <div class="sys-status">
+            <div class="pulse"></div> SYSTEM ONLINE
         </div>
     </header>
 
@@ -298,13 +484,51 @@
             <button id="btn-attack" class="control-btn btn-attack" onclick="toggleAttack()">
                 ⚠️ INJECTER BRUIT ADVERSE
             </button>
-            <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px;">
-                Injecte une perturbation mathématique invisible à l'œil nu pour tromper l'extracteur d'empreinte faciale (FaceNet).
+            <div id="attack-selection-container" style="margin-top: 15px; display: none;">
+                <div class="section-header" style="font-size: 0.8rem; margin-bottom: 8px;">Paramètres d'Attaque FGSM</div>
+                <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
+                    Perturbation invisible injectée sur le visage pour usurper une identité enregistrée.
+                </div>
+                <div class="epsilon-control" style="margin-bottom: 0;">
+                    <div class="epsilon-header">
+                        <span>Force de l'attaque (ε)</span>
+                        <span class="epsilon-value" id="epsilon-val">0.15</span>
+                    </div>
+                    <input type="range" id="epsilon-slider" min="0" max="30" value="15" step="1"
+                           aria-label="Force de l'attaque FGSM"
+                           oninput="onEpsilonInput(this.value)">
+                    <div class="epsilon-hints">
+                        <span>Aucune (0.00)</span>
+                        <span>Forte (0.30)</span>
+                    </div>
+                </div>
+                <div class="heatmap-block">
+                    <div class="heatmap-label">Carte de perturbation (bruit amplifié)</div>
+                    <img id="perturbation-heatmap" class="heatmap-preview" alt="Heatmap perturbation FGSM">
+                    <div id="heatmap-placeholder" class="heatmap-placeholder">
+                        Calcul du bruit invisible en cours…
+                    </div>
+                    <div class="heatmap-legend">
+                        <span>🟦 Faible</span>
+                        <span>🟥 Fort</span>
+                    </div>
+                </div>
             </div>
             
             <button id="btn-mode" class="control-btn btn-defense" onclick="toggleMode()">
                 🛡️ ACTIVER FILTRE DÉFENSE
             </button>
+            <div id="defense-selection-container" style="margin-top: 15px; display: none;">
+                <div class="section-header" style="font-size: 0.8rem; margin-bottom: 8px;">Méthode de Défense</div>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <button class="defense-opt-btn" id="def-opt-none" onclick="setDefenseType('none')">Pas de défense (Aucune)</button>
+                    <button class="defense-opt-btn" id="def-opt-clean_pipeline" onclick="setDefenseType('clean_pipeline')">Nettoyage permanent (Dénoyage)</button>
+                    <button class="defense-opt-btn" id="def-opt-neural_lr_recover" onclick="setDefenseType('neural_lr_recover')">LR + Reconstruction (Dénoyage)</button>
+                    <button class="defense-opt-btn" id="def-opt-neural_lr_reject" onclick="setDefenseType('neural_lr_reject')">LR + Rejet (Blocage strict)</button>
+                    <button class="defense-opt-btn" id="def-opt-neural_cnn_recover" onclick="setDefenseType('neural_cnn_recover')">CNN + Reconstruction (Dénoyage)</button>
+                    <button class="defense-opt-btn" id="def-opt-neural_cnn_reject" onclick="setDefenseType('neural_cnn_reject')">CNN + Rejet (Blocage strict)</button>
+                </div>
+            </div>
         </div>
 
         <div>
@@ -323,6 +547,9 @@
 
         <div style="display: flex; flex-direction: column; flex: 1;">
             <div class="section-header">Journal d'Événements</div>
+            <button type="button" id="btn-export-pdf" class="btn-export-pdf" onclick="downloadPDFReport()">
+                📄 EXPORT PDF — RAPPORT D'AUDIT
+            </button>
             <div class="log-container" id="log-list">
                 <!-- Logs will be inserted here -->
             </div>
@@ -333,6 +560,25 @@
         let lastIdentity = "";
         const logList = document.getElementById('log-list');
         const panelLeft = document.getElementById('panel-left');
+
+        let sessionStats = {
+            fpsList: [],
+            latencyList: [],
+            anomalyTriggers: 0,
+            attackInjections: 0,
+            deniedAttempts: 0,
+            grantedAccesses: 0,
+            startTime: new Date()
+        };
+        let prevAnomalyState = false;
+        let prevAttackState = false;
+        let prevAccessLevel = null;
+        const STATS_MAX = 500;
+
+        function pushStatList(list, value) {
+            list.push(value);
+            if (list.length > STATS_MAX) list.shift();
+        }
 
         function addLog(message) {
             const div = document.createElement('div');
@@ -395,15 +641,29 @@
             document.getElementById('zone-cashier').className = 'zone-item ' + (perms.cashier ? 'zone-granted' : 'zone-denied');
             document.getElementById('zone-server').className = 'zone-item ' + (perms.server ? 'zone-granted' : 'zone-denied');
 
-            // FPS
+            // FPS & latence (stats session PDF)
+            if (data.fps !== undefined) pushStatList(sessionStats.fpsList, data.fps);
+            pushStatList(sessionStats.latencyList, data.infer_ms ?? 0);
+
+            if (data.anomaly_detected && !prevAnomalyState) sessionStats.anomalyTriggers++;
+            if (data.attack_active && !prevAttackState) sessionStats.attackInjections++;
+            if (prevAccessLevel !== null && data.access_level !== prevAccessLevel) {
+                if (['ADMIN', 'EMPLOYEE'].includes(data.access_level)) sessionStats.grantedAccesses++;
+                else if (data.access_level === 'DENIED') sessionStats.deniedAttempts++;
+            }
+            prevAnomalyState = !!data.anomaly_detected;
+            prevAttackState = !!data.attack_active;
+            prevAccessLevel = data.access_level;
+
+            // FPS affichage
             document.getElementById('fps-val').innerText = data.fps;
 
             // Anomaly
             const anomAlert = document.getElementById('anomaly-alert');
             const anomBar = document.getElementById('anomaly-bar');
-            if (data.anomaly_detected) {
+            if (data.anomaly_detected || data.anomaly_score > 0.15) {
                 anomAlert.className = 'alert-box danger';
-                anomAlert.innerText = '⚠️ SPOOFING DÉTECTÉ (FFT)';
+                anomAlert.innerText = data.anomaly_score >= 0.9 ? '⚠️ ATTAQUE ADVERSE DÉTECTÉE' : '⚠️ SPOOFING DÉTECTÉ (FFT)';
                 anomBar.classList.add('high');
             } else {
                 anomAlert.className = 'alert-box';
@@ -414,29 +674,138 @@
             document.getElementById('anomaly-score-text').innerText = scoreVal;
             document.getElementById('anomaly-bar').style.width = `${Math.min(scoreVal * 100, 100)}%`;
 
-            // Buttons
+            // Buttons — attaque
             const btnAttack = document.getElementById('btn-attack');
+            const attackContainer = document.getElementById('attack-selection-container');
             if (data.attack_active) {
                 btnAttack.className = 'control-btn btn-attack active';
                 btnAttack.innerHTML = '🛑 COUPER L\'INJECTION (FGSM)';
+                attackContainer.style.display = 'block';
             } else {
                 btnAttack.className = 'control-btn btn-attack';
                 btnAttack.innerHTML = '⚠️ INJECTER BRUIT ADVERSE';
+                attackContainer.style.display = 'none';
             }
 
             const btnMode = document.getElementById('btn-mode');
+            const defContainer = document.getElementById('defense-selection-container');
             if (data.model_mode === 'hardened') {
                 btnMode.className = 'control-btn btn-defense active';
                 btnMode.innerHTML = '🟢 FILTRE DÉFENSE ACTIF';
+                defContainer.style.display = 'block';
             } else {
                 btnMode.className = 'control-btn btn-defense';
                 btnMode.innerHTML = '🛡️ ACTIVER FILTRE DÉFENSE';
+                defContainer.style.display = 'none';
+            }
+
+            // Mettre en valeur la méthode de défense sélectionnée
+            const activeType = data.defense_type || 'none';
+            const optButtons = ['none', 'clean_pipeline', 'neural_lr_recover', 'neural_lr_reject', 'neural_cnn_recover', 'neural_cnn_reject'];
+            optButtons.forEach(type => {
+                const btn = document.getElementById(`def-opt-${type}`);
+                if (btn) {
+                    if (type === activeType) {
+                        btn.classList.add('active');
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                }
+            });
+
+            // Heatmap perturbation FGSM
+            updateHeatmapPreview(data.attack_active);
+
+            // Epsilon FGSM
+            if (data.fgsm_epsilon !== undefined) {
+                const slider = document.getElementById('epsilon-slider');
+                const valEl = document.getElementById('epsilon-val');
+                const sliderVal = Math.round(data.fgsm_epsilon * 100);
+                if (slider && !epsilonDragging && parseInt(slider.value, 10) !== sliderVal) {
+                    slider.value = sliderVal;
+                }
+                if (valEl) {
+                    const eps = data.fgsm_epsilon;
+                    valEl.innerText = eps <= 0 ? '0.00 (aucune attaque)' : eps.toFixed(2);
+                }
+            }
+        }
+
+        let heatmapTick = 0;
+        let lastHeatmapRefresh = 0;
+        function updateHeatmapPreview(attackActive) {
+            const hmImg = document.getElementById('perturbation-heatmap');
+            const placeholder = document.getElementById('heatmap-placeholder');
+            if (!hmImg || !placeholder) return;
+            if (!attackActive) {
+                hmImg.style.display = 'none';
+                hmImg.removeAttribute('src');
+                placeholder.style.display = 'none';
+                lastHeatmapRefresh = 0;
+                return;
+            }
+            const now = Date.now();
+            if (now - lastHeatmapRefresh < 800) return;
+            lastHeatmapRefresh = now;
+            placeholder.style.display = 'flex';
+            placeholder.innerText = 'Calcul du bruit invisible en cours…';
+            heatmapTick += 1;
+            const probe = new Image();
+            probe.onload = function() {
+                hmImg.src = probe.src;
+                hmImg.style.display = 'block';
+                placeholder.style.display = 'none';
+            };
+            probe.onerror = function() {
+                hmImg.style.display = 'none';
+                placeholder.style.display = 'flex';
+                placeholder.innerText = 'Calcul du bruit invisible en cours…';
+            };
+            probe.src = '/api/perturbation_heatmap?_=' + Date.now() + '_' + heatmapTick;
+        }
+
+        let epsilonDragging = false;
+        let epsilonDebounce = null;
+        let lastEpsilonSent = null;
+
+        function onEpsilonInput(rawVal) {
+            epsilonDragging = true;
+            const epsilon = parseInt(rawVal, 10) / 100;
+            const label = epsilon <= 0 ? '0.00 (aucune attaque)' : epsilon.toFixed(2);
+            document.getElementById('epsilon-val').innerText = label;
+            clearTimeout(epsilonDebounce);
+            epsilonDebounce = setTimeout(() => {
+                setFgsmEpsilon(epsilon);
+                epsilonDragging = false;
+            }, 350);
+        }
+
+        async function setFgsmEpsilon(epsilon) {
+            if (lastEpsilonSent === epsilon) return;
+            try {
+                const response = await fetch('/api/set_fgsm_epsilon', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({epsilon})
+                });
+                const res = await response.json();
+                if (res.success) {
+                    lastEpsilonSent = epsilon;
+                    const msg = epsilon <= 0
+                        ? '⚙️ FGSM désactivé (ε = 0 — pas de perturbation)'
+                        : `⚙️ Force attaque FGSM : ε = ${epsilon.toFixed(2)}`;
+                    addLog(msg);
+                }
+            } catch (error) {
+                console.error('Erreur réglage epsilon', error);
             }
         }
 
         let currentAttackState = false;
         async function toggleAttack() {
             currentAttackState = !currentAttackState;
+            const attackContainer = document.getElementById('attack-selection-container');
+            attackContainer.style.display = currentAttackState ? 'block' : 'none';
             await fetch('/api/toggle_attack', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -456,6 +825,127 @@
             });
             if(currentMode === 'hardened') addLog("🛡️ Filtre de défense activé (Hardened Mode)");
             else addLog("Désactivation du filtre de défense.");
+        }
+
+        // Strict block helper functions have been removed since behavior is unified.
+
+        async function setDefenseType(type) {
+            try {
+                const response = await fetch('/api/set_defense_type', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({defense_type: type})
+                });
+                const res = await response.json();
+                if (res.success) {
+                    addLog(`🛡️ Méthode de défense activée : ${type}`);
+                } else {
+                    addLog(`❌ Erreur configuration défense : ${res.error}`);
+                }
+            } catch (error) {
+                console.error("Erreur de requête", error);
+            }
+        }
+
+        }
+
+        async function downloadPDFReport() {
+            const btn = document.getElementById('btn-export-pdf');
+            if (!window.jspdf) {
+                addLog('❌ jsPDF non chargé — vérifiez la connexion internet.');
+                return;
+            }
+            btn.disabled = true;
+            btn.innerText = '⏳ Génération du PDF…';
+            try {
+                const response = await fetch('/api/audit_logs');
+                const result = await response.json();
+                const logs = result.success ? (result.logs || []) : [];
+
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                const fpsList = sessionStats.fpsList.length ? sessionStats.fpsList : [0];
+                const latencyList = sessionStats.latencyList.length ? sessionStats.latencyList : [0];
+                const avgFps = (fpsList.reduce((a, b) => a + b, 0) / fpsList.length).toFixed(1);
+                const maxFps = Math.max(...fpsList, 0);
+                const avgLat = (latencyList.reduce((a, b) => a + b, 0) / latencyList.length).toFixed(1);
+                const maxLat = Math.max(...latencyList, 0);
+                const durationSec = Math.floor((new Date() - sessionStats.startTime) / 1000);
+                const durationStr = `${Math.floor(durationSec / 60)}m ${durationSec % 60}s`;
+
+                doc.setFillColor(19, 19, 19);
+                doc.rect(0, 0, 210, 45, 'F');
+                doc.setTextColor(0, 219, 233);
+                doc.setFont('Helvetica', 'bold');
+                doc.setFontSize(18);
+                doc.text('SECURAI — RAPPORT D\'AUDIT DE SÉCURITÉ', 15, 18);
+                doc.setTextColor(229, 226, 225);
+                doc.setFontSize(10);
+                doc.setFont('Helvetica', 'normal');
+                doc.text(`Généré le : ${new Date().toLocaleString('fr-FR')}`, 15, 28);
+                doc.text(`Début session : ${sessionStats.startTime.toLocaleString('fr-FR')}`, 15, 35);
+                doc.text(`Durée session : ${durationStr}`, 15, 41);
+
+                let y = 55;
+                const sectionTitle = (title) => {
+                    doc.setFont('Helvetica', 'bold');
+                    doc.setFontSize(12);
+                    doc.setTextColor(0, 120, 150);
+                    doc.text(title, 15, y);
+                    y += 8;
+                };
+                const addStatRow = (label, val) => {
+                    doc.setFontSize(10);
+                    doc.setFont('Helvetica', 'bold');
+                    doc.setTextColor(60, 60, 60);
+                    doc.text(label, 20, y);
+                    doc.setFont('Helvetica', 'normal');
+                    doc.setTextColor(0, 0, 0);
+                    doc.text(String(val), 190, y, { align: 'right' });
+                    doc.setDrawColor(240, 240, 240);
+                    doc.setLineWidth(0.2);
+                    doc.line(20, y + 2, 190, y + 2);
+                    y += 8;
+                };
+
+                sectionTitle('1. Performances système');
+                addStatRow('Durée de session', durationStr);
+                addStatRow('FPS moyen', `${avgFps} FPS`);
+                addStatRow('FPS max', `${maxFps} FPS`);
+                addStatRow('Latence inférence moyenne', `${avgLat} ms`);
+                addStatRow('Latence inférence max', `${maxLat} ms`);
+                y += 4;
+
+                sectionTitle('2. Évaluation sécuritaire');
+                addStatRow('Activations attaque FGSM', sessionStats.attackInjections);
+                addStatRow('Alertes FFT déclenchées', sessionStats.anomalyTriggers);
+                addStatRow('Accès accordés (MANAGER / EMPLOYÉ)', sessionStats.grantedAccesses);
+                addStatRow('Accès refusés', sessionStats.deniedAttempts);
+                y += 4;
+
+                sectionTitle('3. Journal d\'audit serveur (100 dernières lignes)');
+                doc.setFont('Courier', 'normal');
+                doc.setFontSize(8);
+                doc.setTextColor(80, 80, 80);
+                const logLines = logs.length ? logs : ['(Aucune entrée dans security_audit.log)'];
+                for (let i = 0; i < logLines.length; i++) {
+                    const splitLines = doc.splitTextToSize(logLines[i].replace(/\s+/g, ' '), 180);
+                    for (let j = 0; j < splitLines.length; j++) {
+                        if (y > 280) { doc.addPage(); y = 20; }
+                        doc.text(splitLines[j], 15, y);
+                        y += 4.5;
+                    }
+                }
+
+                doc.save(`SecurAI_Audit_Report_${Date.now()}.pdf`);
+                addLog('✓ Rapport PDF généré avec succès.');
+            } catch (err) {
+                console.error(err);
+                addLog('❌ Erreur génération PDF : ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = '📄 EXPORT PDF — RAPPORT D\'AUDIT';
+            }
         }
 
         setInterval(fetchStatus, 300); // 300ms for smoother updates

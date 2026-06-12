@@ -25,17 +25,21 @@ class FGSMAttacker:
         img_tensor = (img_tensor - self.mean.cpu().squeeze(0)) / self.std.cpu().squeeze(0)
         return img_tensor.unsqueeze(0).to(self.device)
 
-    def attack(self, face_crop: np.ndarray, target_embedding=None, steps=10):
+    def attack(self, face_crop: np.ndarray, target_embedding=None, steps=10, epsilon=None):
         """
         Applique l'attaque I-FGSM (Iterative FGSM / PGD) sur un crop BGR.
         FaceNet est très robuste, une attaque itérative est nécessaire.
+        epsilon : force de la perturbation (0 = aucune, 0.25+ = forte). Si None, utilise self.epsilon.
         """
+        eps = float(epsilon if epsilon is not None else self.epsilon)
+        eps = max(0.0, min(0.30, eps))
+        if eps <= 0.0:
+            return face_crop.copy()
+
+        alpha = max(eps / steps, 0.001)
+
         img_tensor_orig = self.preprocess(face_crop)
         img_tensor = img_tensor_orig.clone().detach().requires_grad_(True)
-        
-        # On augmente l'epsilon car FaceNet est coriace et la distance est grande
-        self.epsilon = 0.15 
-        alpha = 0.02 # Taille du pas par itération
         
         for step in range(steps):
             embedding = self.model(img_tensor)
@@ -60,7 +64,7 @@ class FGSMAttacker:
                 adv_img = img_tensor + sign * alpha * img_tensor.grad.sign()
                 
                 # S'assurer qu'on ne dépasse pas la limite de perturbation maximale (epsilon)
-                eta = torch.clamp(adv_img - img_tensor_orig, min=-self.epsilon, max=self.epsilon)
+                eta = torch.clamp(adv_img - img_tensor_orig, min=-eps, max=eps)
                 img_tensor = img_tensor_orig + eta
                 
             img_tensor.requires_grad = True
@@ -75,6 +79,22 @@ class FGSMAttacker:
         
         h, w = face_crop.shape[:2]
         return cv2.resize(perturbed_bgr, (w, h))
+
+    @staticmethod
+    def perturbation_heatmap(clean_bgr: np.ndarray, adv_bgr: np.ndarray, amplify: float = 8.0) -> np.ndarray | None:
+        """
+        Carte de chaleur de la différence clean vs attaqué (visualisation pédagogique).
+        Amplifie le bruit invisible pour l'affichage dans l'interface.
+        """
+        if clean_bgr is None or adv_bgr is None:
+            return None
+        clean = cv2.resize(clean_bgr, (160, 160))
+        adv = cv2.resize(adv_bgr, (160, 160))
+        diff = np.abs(adv.astype(np.float32) - clean.astype(np.float32))
+        magnitude = np.max(diff, axis=2)
+        magnitude = np.clip(magnitude * amplify, 0, 255).astype(np.uint8)
+        heat = cv2.applyColorMap(magnitude, cv2.COLORMAP_JET)
+        return cv2.addWeighted(clean, 0.3, heat, 0.7, 0)
 
     def get_perturbation_visual(self, face_crop):
         """Retourne uniquement le bruit ajouté (amplifié x10) pour l'UI."""

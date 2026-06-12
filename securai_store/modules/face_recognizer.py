@@ -27,7 +27,7 @@ class FaceRecognizer:
         ])
         
         self.enrolled_embeddings = {}
-        self.threshold = 0.65 # Seuil de similarité cosinus
+        self.threshold = 0.60 # Seuil de similarité cosinus ajusté pour le temps réel (0.60 au lieu de 0.65)
 
     def preprocess(self, face_crop: np.ndarray):
         """Prépare l'image pour FaceNet (RGB + 160x160 + Tenseur)."""
@@ -58,9 +58,11 @@ class FaceRecognizer:
         return True
 
     @torch.no_grad()
-    def predict(self, face_crop: np.ndarray):
+    def predict(self, face_crop: np.ndarray, is_denoised: bool = False):
         """
         Compare le visage avec la base de données via Cosine Similarity.
+        Si l'image a subi un dénoyage, on applique un seuil légèrement plus tolérant (seuil - 0.08)
+        pour compenser la perte de détails fins induite par les filtres.
         """
         if face_crop is None or len(self.enrolled_embeddings) == 0:
             return "Inconnu", 0.0
@@ -77,7 +79,10 @@ class FaceRecognizer:
                 best_score = score
                 best_name = name
                 
-        if best_score < self.threshold:
+        # ε=0.15 (notre FGSM) fait chuter les scores de ~0.10-0.12
+        # On abaisse donc le seuil de 0.12 pour les frames nettoyées
+        effective_threshold = self.threshold - 0.12 if is_denoised else self.threshold
+        if best_score < effective_threshold:
             return "Inconnu", max(0.0, best_score)
             
         return best_name, best_score

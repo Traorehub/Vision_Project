@@ -14,6 +14,13 @@ class PatchAttacker:
     Implémente une attaque par patch adversarial localisé en forme de lunettes.
     Seuls les pixels sous le masque sont modifiés, simulant une paire de lunettes
     imprimées / portées physiquement.
+
+    Workflow live (recommandé) :
+      1. generate_patch(target_emb, target_name)  — calcul PGD unique (~3s CPU)
+      2. apply_patch(face_bgr, perturbation)       — application légère (<5ms/frame)
+
+    Mode statique (compatibilité) :
+      attack(face_bgr, target_embedding)           — recalcule le patch à chaque appel (~2s)
     """
 
     def __init__(self, model, epsilon: float = 0.35, steps: int = 40, alpha: float = 0.02):
@@ -33,6 +40,9 @@ class PatchAttacker:
         # Normalisation FaceNet
         self.mean = torch.tensor([0.5, 0.5, 0.5]).view(1, 3, 1, 1).to(self.device)
         self.std  = torch.tensor([0.5, 0.5, 0.5]).view(1, 3, 1, 1).to(self.device)
+
+        # Cache des patches pré-calculés : {target_name: perturbation_tensor}
+        self._patch_cache: dict = {}
 
     # ------------------------------------------------------------------
     # Masque Lunettes
@@ -102,15 +112,99 @@ class PatchAttacker:
         return bgr
 
     # ------------------------------------------------------------------
-    # Attaque principale
+    # Génération du patch (à appeler UNE seule fois par cible)
     # ------------------------------------------------------------------
-    def attack(self, face_bgr: np.ndarray, target_embedding: torch.Tensor) -> np.ndarray:
+    def generate_patch(self, target_embedding: torch.Tensor,
+                       target_name: str = "__unnamed__") -> torch.Tensor:
+        """
+        Calcule le tenseur de perturbation optimal via PGD pour la cible donnée.
+        Stocke le résultat dans le cache interne (accès via get_cached_patch).
+
+        Ce calcul prend ~2–5s (CPU) et ne doit être exécuté qu'UNE seule fois
+        par cible, dans un thread background pour ne pas bloquer le flux vidéo.
+
+        Args:
+            target_embedding: Embedding 512D normalisé du visage cible.
+            target_name:      Clé de cache (ex: "Manager_Demo").
+
+        Retourne le tenseur de perturbation (1, 3, 160, 160) prêt à apply_patch().
+        """
+        neutral = np.full((160, 160, 3), 128, dtype=np.uint8)
+        img_tensor = self._preprocess(neutral)
+        mask_np    = self.create_glasses_mask(160, 160)
+
+        mask_t = torch.from_numpy(mask_np).unsqueeze(0).unsqueeze(0).to(self.device)
+        mask_t = mask_t.expand_as(img_tensor)
+
+        target_embedding = target_embedding.to(self.device)
+        perturbation = torch.zeros_like(img_tensor, requires_grad=False)
+
+        self.model.eval()
+        for _ in range(self.steps):
+            perturbation.requires_grad_(True)
+            adv_tensor = img_tensor + perturbation * mask_t
+            adv_tensor = torch.clamp(adv_tensor, -1.0, 1.0)
+            embedding = self.model(adv_tensor)
+            embedding = F.normalize(embedding, p=2, dim=1)
+            loss = 1.0 - F.cosine_similarity(embedding, target_embedding)
+            self.model.zero_grad()
+            loss.backward()
+            with torch.no_grad():
+                grad_sign    = perturbation.grad.sign()
+                perturbation = perturbation - self.alpha * grad_sign
+                perturbation = torch.clamp(perturbation, -self.epsilon, self.epsilon)
+
+        final_perturbation = perturbation.detach().clone()
+        self._patch_cache[target_name] = final_perturbation
+        return final_perturbation
+
+    def get_cached_patch(self, target_name: str):
+        """Retourne le patch pré-calculé pour la cible, ou None si absent."""
+        return self._patch_cache.get(target_name)
+
+    def invalidate_cache(self, target_name: str = None) -> None:
+        """Vide le cache (toute la cible ou une cible spécifique)."""
+        if target_name is None:
+            self._patch_cache.clear()
+        else:
+            self._patch_cache.pop(target_name, None)
+
+    # ------------------------------------------------------------------
+    # Application du patch pré-calculé (<5ms, appelée à chaque frame)
+    # ------------------------------------------------------------------
+    def apply_patch(self, face_bgr: np.ndarray,
+                    perturbation: torch.Tensor) -> np.ndarray:
+        """
+        Applique un tenseur de perturbation pré-calculé sur un crop BGR.
+        Aucun calcul de gradient — exécution en <5ms, convient au flux live.
+        """
+        if perturbation is None:
+            return face_bgr
+
+        orig_h, orig_w = face_bgr.shape[:2]
+        img_tensor = self._preprocess(face_bgr)
+        mask_np    = self.create_glasses_mask(160, 160)
+
+        mask_t = torch.from_numpy(mask_np).unsqueeze(0).unsqueeze(0).to(self.device)
+        mask_t = mask_t.expand_as(img_tensor)
+
+        with torch.no_grad():
+            adv = img_tensor + perturbation.to(self.device) * mask_t
+            adv = torch.clamp(adv, -1.0, 1.0)
+
+        return self._postprocess(adv, (orig_w, orig_h))
+
+    # ------------------------------------------------------------------
+    # Attaque principale (mode statique — garde la compatibilité)
+    # ------------------------------------------------------------------
+    def attack(self, face_bgr: np.ndarray, target_embedding: torch.Tensor, target_name: str = None) -> np.ndarray:
         """
         Applique l'attaque adversariale localisée (masque lunettes) sur un crop BGR.
 
         Args:
             face_bgr:         Image du visage en BGR (numpy, n'importe quelle taille).
             target_embedding: Embedding 512D normalisé du visage cible (ex: Manager_Demo).
+            target_name:      Optionnel, nom de la cible pour enregistrer le patch dans le cache live.
 
         Retourne l'image BGR avec les lunettes adversariales incrustées.
         """
@@ -155,6 +249,9 @@ class PatchAttacker:
         with torch.no_grad():
             adv_final = img_tensor_orig + perturbation.detach() * mask_t
             adv_final = torch.clamp(adv_final, -1.0, 1.0)
+
+        if target_name is not None:
+            self._patch_cache[target_name] = perturbation.detach().clone()
 
         result_bgr = self._postprocess(adv_final, (orig_w, orig_h))
         return result_bgr

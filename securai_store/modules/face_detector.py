@@ -48,39 +48,57 @@ class FaceDetector:
         self.frame_count = 0
         self.last_results = []
 
-    def detect(self, frame: np.ndarray):
+    def detect(self, frame: np.ndarray, force: bool = False):
         """
         Détecte les visages avec un système de frame skipping pour le CPU.
+        Si force=True, on court-circuite le frame skipping (utile pour l'enrôlement ou l'analyse statique).
         """
+        if force:
+            results = self.model(frame, verbose=False, conf=0.5, imgsz=320)
+            boxes = []
+            for r in results:
+                for box in r.boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
+                    boxes.append((x1, y1, x2, y2))
+            return boxes
+
         self.frame_count += 1
         
         # On ne traite qu'une frame sur N
         if self.frame_count % self.frame_skip == 0 or not self.last_results:
-            results = self.model(frame, verbose=False, conf=0.5, imgsz=160)
+            # Augmentation de imgsz de 160 à 320 pour une meilleure précision des coordonnées
+            results = self.model(frame, verbose=False, conf=0.5, imgsz=320)
             self.last_results = []
             
             for r in results:
                 for box in r.boxes:
-                    # Si on utilise yolov8n.pt standard, on filtre la classe 0 (personne)
-                    # Si on utilise yolov8n-face.pt, toutes les boxes sont des visages
                     x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
                     self.last_results.append((x1, y1, x2, y2))
                     
         return self.last_results
-
-    def crop_face(self, frame, bbox, size=128):
+ 
+    def crop_face(self, frame, bbox, size=128, margin_ratio=0.30):
         """
-        Découpe et redimensionne le visage.
+        Découpe et redimensionne le visage en ajoutant une marge de 15% pour correspondre
+        aux attentes géométriques de FaceNet et augmenter la précision de la similarité.
         """
         x1, y1, x2, y2 = bbox
-        # Assurer que les coordonnées sont dans l'image
         h, w = frame.shape[:2]
-        x1, y1 = max(0, x1), max(0, y1)
-        x2, y2 = min(w, x2), min(h, y2)
         
-        face = frame[y1:y2, x1:x2]
+        bw = x2 - x1
+        bh = y2 - y1
+        
+        # Ajouter la marge
+        x1_m = max(0, int(x1 - bw * margin_ratio))
+        y1_m = max(0, int(y1 - bh * margin_ratio))
+        x2_m = min(w, int(x2 + bw * margin_ratio))
+        y2_m = min(h, int(y2 + bh * margin_ratio))
+        
+        face = frame[y1_m:y2_m, x1_m:x2_m]
         if face.size == 0:
-            return None
+            face = frame[y1:y2, x1:x2]
+            if face.size == 0:
+                return None
             
         face_resized = cv2.resize(face, (size, size))
         return face_resized

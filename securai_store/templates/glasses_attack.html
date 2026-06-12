@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecurAI | Attaque Lunettes Live</title>
+    <meta name="description" content="Interface d'attaque adversariale par patch lunettes en temps réel — SecurAI">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+        :root {
+            --bg-base:      #030308;
+            --bg-panel:     rgba(12, 12, 22, 0.90);
+            --bg-card:      rgba(20, 20, 35, 0.80);
+            --border:       rgba(255, 255, 255, 0.08);
+            --border-glow:  rgba(255, 170, 0, 0.35);
+            --text-main:    #f0f0f0;
+            --text-muted:   #666;
+            --text-dim:     #888;
+            --ok:           #00E676;
+            --warn:         #FFD600;
+            --danger:       #FF1744;
+            --info:         #00E5FF;
+            --accent:       #FF9800;
+            --accent-glow:  rgba(255, 152, 0, 0.25);
+            --purple:       #9C27B0;
+            --font-ui:      'Rajdhani', sans-serif;
+            --font-data:    'JetBrains Mono', monospace;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg-base);
+            color: var(--text-main);
+            font-family: var(--font-ui);
+            min-height: 100vh;
+            background-image:
+                radial-gradient(ellipse 80% 50% at 50% -10%, rgba(255,152,0,0.08), transparent),
+                radial-gradient(ellipse 60% 40% at 80% 90%, rgba(0,229,255,0.04), transparent);
+        }
+
+        /* ── Header ──────────────────────────────────────────────── */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+            height: 60px;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(15px);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .logo { font-size: 1.6rem; font-weight: 700; letter-spacing: 3px; }
+        .logo span { color: var(--accent); }
+        .logo sub { font-size: 0.7rem; color: var(--text-muted); letter-spacing: 1px; margin-left: 6px; vertical-align: middle; }
+        .nav-links { display: flex; gap: 12px; align-items: center; }
+        .nav-link {
+            color: var(--text-dim); text-decoration: none;
+            font-size: 0.85rem; font-weight: 600; letter-spacing: 1px;
+            padding: 6px 14px; border: 1px solid var(--border);
+            border-radius: 4px; transition: all 0.2s;
+        }
+        .nav-link:hover { color: var(--text-main); background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.2); }
+        .nav-link.active { color: var(--accent); border-color: var(--accent); background: var(--accent-glow); }
+
+        /* ── Layout ──────────────────────────────────────────────── */
+        .page {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 24px;
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 24px;
+            align-items: start;
+        }
+
+        /* ── Section title ───────────────────────────────────────── */
+        .section-title {
+            font-size: 0.72rem;
+            font-family: var(--font-data);
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+            margin-bottom: 18px;
+        }
+
+        /* ── Card ─────────────────────────────────────────────────── */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            backdrop-filter: blur(20px);
+        }
+        .card + .card { margin-top: 16px; }
+
+        /* ── Steps sidebar ────────────────────────────────────────── */
+        .step {
+            position: relative;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.02);
+            transition: all 0.3s;
+            margin-bottom: 14px;
+        }
+        .step.active {
+            border-color: var(--accent);
+            background: var(--accent-glow);
+            box-shadow: 0 0 20px rgba(255,152,0,0.12);
+        }
+        .step.done {
+            border-color: rgba(0,230,118,0.3);
+            background: rgba(0,230,118,0.04);
+        }
+        .step.disabled { opacity: 0.4; pointer-events: none; }
+        .step-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            font-family: var(--font-data);
+            font-size: 0.85rem;
+            font-weight: 700;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid var(--border);
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+        .step.active .step-badge { background: var(--accent); border-color: var(--accent); color: #000; }
+        .step.done .step-badge   { background: var(--ok); border-color: var(--ok); color: #000; }
+        .step-header { display: flex; align-items: center; margin-bottom: 14px; }
+        .step-label { font-size: 1.1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+        .step-desc  { font-size: 0.88rem; color: var(--text-dim); line-height: 1.5; margin-bottom: 14px; }
+
+        /* ── Select ──────────────────────────────────────────────── */
+        select {
+            width: 100%;
+            padding: 10px 14px;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 6px;
+            color: var(--text-main);
+            font-family: var(--font-data);
+            font-size: 0.9rem;
+            outline: none;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%23888'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            transition: border-color 0.2s;
+        }
+        select:focus { border-color: var(--accent); }
+
+        /* ── Buttons ──────────────────────────────────────────────── */
+        .btn {
+            width: 100%;
+            padding: 13px 20px;
+            border: none;
+            border-radius: 7px;
+            font-family: var(--font-ui);
+            font-size: 1rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            cursor: pointer;
+            transition: all 0.25s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .btn-generate {
+            background: rgba(255,152,0,0.12);
+            color: var(--accent);
+            border: 1px solid var(--accent);
+        }
+        .btn-generate:hover:not(:disabled) {
+            background: rgba(255,152,0,0.22);
+            box-shadow: 0 0 20px rgba(255,152,0,0.25);
+        }
+
+        .btn-attack {
+            background: rgba(255,23,68,0.12);
+            color: var(--danger);
+            border: 1px solid var(--danger);
+        }
+        .btn-attack:hover:not(:disabled) {
+            background: rgba(255,23,68,0.22);
+            box-shadow: 0 0 20px rgba(255,23,68,0.3);
+        }
+        .btn-attack.active {
+            background: var(--danger);
+            color: #fff;
+            box-shadow: 0 0 25px rgba(255,23,68,0.4);
+        }
+
+        .btn-stop {
+            background: rgba(255,255,255,0.06);
+            color: var(--text-dim);
+            border: 1px solid var(--border);
+            margin-top: 10px;
+        }
+        .btn-stop:hover:not(:disabled) { background: rgba(255,255,255,0.1); color: var(--text-main); }
+
+        /* ── Status badge ────────────────────────────────────────── */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-family: var(--font-data);
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+        .badge-idle    { background: rgba(255,255,255,0.06); color: var(--text-muted); border: 1px solid var(--border); }
+        .badge-working { background: rgba(255,152,0,0.15);  color: var(--accent);     border: 1px solid rgba(255,152,0,0.4); }
+        .badge-ready   { background: rgba(0,230,118,0.12);  color: var(--ok);         border: 1px solid rgba(0,230,118,0.4); }
+        .badge-active  { background: rgba(255,23,68,0.15);  color: var(--danger);     border: 1px solid rgba(255,23,68,0.4); animation: pulse-red 1.5s infinite; }
+
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255,23,68,0); }
+            50%       { box-shadow: 0 0 0 6px rgba(255,23,68,0.12); }
+        }
+
+        .dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+        .dot.blink { animation: blink 1s infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+        /* ── Progress bar ────────────────────────────────────────── */
+        .progress-wrap { margin-top: 14px; }
+        .progress-label {
+            display: flex; justify-content: space-between;
+            font-family: var(--font-data); font-size: 0.75rem;
+            color: var(--text-muted); margin-bottom: 6px;
+        }
+        .progress-bg {
+            height: 4px; background: rgba(255,255,255,0.07);
+            border-radius: 2px; overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%; width: 0%;
+            background: linear-gradient(90deg, var(--accent), #FFD600);
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+        .progress-fill.indeterminate {
+            width: 40%;
+            animation: indeterminate 1.4s infinite ease-in-out;
+        }
+        @keyframes indeterminate {
+            0%   { transform: translateX(-100%); }
+            100% { transform: translateX(350%); }
+        }
+
+        /* ── Mask preview ────────────────────────────────────────── */
+        .mask-preview {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .mask-preview canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+        .mask-label {
+            position: absolute;
+            bottom: 10px; left: 10px;
+            font-family: var(--font-data);
+            font-size: 0.7rem;
+            color: rgba(0,229,255,0.8);
+            background: rgba(0,0,0,0.6);
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+
+        /* ── Video container ─────────────────────────────────────── */
+        .video-wrap {
+            position: relative;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: #000;
+            aspect-ratio: 4/3;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+        }
+        .video-wrap img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .video-hud {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .video-hud-top { display: flex; justify-content: space-between; align-items: flex-start; }
+        .video-hud-bottom { display: flex; flex-direction: column; gap: 8px; }
+
+        .hud-badge {
+            font-family: var(--font-data);
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 5px 12px;
+            border-radius: 4px;
+            letter-spacing: 1px;
+        }
+        .hud-rec {
+            background: rgba(255,23,68,0.2);
+            color: var(--danger);
+            border: 1px solid var(--danger);
+            animation: blink 1s infinite;
+        }
+        .hud-patch-active {
+            background: rgba(255,152,0,0.2);
+            color: var(--accent);
+            border: 1px solid var(--accent);
+        }
+        .hud-identity {
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 12px 16px;
+        }
+        .hud-identity-label { font-size: 0.65rem; color: var(--text-muted); letter-spacing: 2px; margin-bottom: 4px; }
+        .hud-identity-name  { font-size: 1.6rem; font-weight: 700; color: var(--text-main); line-height: 1; }
+        .hud-identity-conf  { font-family: var(--font-data); font-size: 0.78rem; color: var(--text-dim); margin-top: 4px; }
+        .hud-identity-access {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-family: var(--font-data);
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+        .access-granted { background: rgba(0,230,118,0.15); color: var(--ok); border: 1px solid rgba(0,230,118,0.4); }
+        .access-denied  { background: rgba(255,23,68,0.15);  color: var(--danger); border: 1px solid rgba(255,23,68,0.4); }
+
+        .scanning-overlay {
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 3px,
+                rgba(0,229,255,0.015) 3px,
+                rgba(0,229,255,0.015) 4px
+            );
+            pointer-events: none;
+        }
+        .scan-line {
+            position: absolute;
+            left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(0,229,255,0.4), transparent);
+            animation: scan 3s linear infinite;
+        }
+        @keyframes scan { 0%{top:0%} 100%{top:100%} }
+
+        /* ── Metric row ──────────────────────────────────────────── */
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .metric-box {
+            background: rgba(255,255,255,0.025);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+        }
+        .metric-val {
+            font-family: var(--font-data);
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+        .metric-lab {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+
+        /* ── Result image ────────────────────────────────────────── */
+        #result-section { display: none; }
+        #result-section.visible { display: block; }
+        .result-img {
+            width: 100%;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            margin-top: 12px;
+        }
+        .result-compare {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-top: 16px;
+        }
+        .compare-box { text-align: center; }
+        .compare-box img { width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+        .compare-label { font-family: var(--font-data); font-size: 0.75rem; color: var(--text-muted); margin-top: 6px; }
+
+        /* ── Alert ───────────────────────────────────────────────── */
+        .alert-info {
+            background: rgba(0,229,255,0.07);
+            border: 1px solid rgba(0,229,255,0.2);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 0.85rem;
+            color: var(--info);
+            line-height: 1.5;
+        }
+        .alert-warn {
+            background: rgba(255,214,0,0.07);
+            border: 1px solid rgba(255,214,0,0.25);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 0.85rem;
+            color: var(--warn);
+            line-height: 1.5;
+        }
+
+        /* ── Log ─────────────────────────────────────────────────── */
+        .log-box {
+            background: rgba(0,0,0,0.5);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            font-family: var(--font-data);
+            font-size: 0.78rem;
+            max-height: 160px;
+            overflow-y: auto;
+        }
+        .log-entry { padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--text-muted); }
+        .log-entry .ts { color: var(--accent); margin-right: 6px; }
+        .log-entry.ok   .ts { color: var(--ok); }
+        .log-entry.warn .ts { color: var(--warn); }
+        .log-entry.err  .ts { color: var(--danger); }
+
+        /* ── Static test form ────────────────────────────────────── */
+        .file-input-wrap {
+            position: relative;
+            border: 2px dashed rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .file-input-wrap:hover { border-color: rgba(255,152,0,0.4); background: rgba(255,152,0,0.03); }
+        .file-input-wrap input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+        .file-icon { font-size: 2.5rem; margin-bottom: 8px; }
+        .file-hint { font-size: 0.85rem; color: var(--text-muted); }
+        #file-name  { font-family: var(--font-data); font-size: 0.8rem; color: var(--accent); margin-top: 6px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">SECUR<span>AI</span><sub>🕶️ PATCH LAB</sub></div>
+    <nav class="nav-links">
+        <a href="/"               class="nav-link">🎥 Live Feed</a>
+        <a href="/static_analysis" class="nav-link">🔍 Analyse Statique</a>
+        <a href="/glasses_attack"  class="nav-link active">🕶️ Attaque Lunettes</a>
+    </nav>
+</header>
+
+<div class="page">
+
+    <!-- ── COLONNE GAUCHE : workflow ─────────────────────────────── -->
+    <aside>
+        <p class="section-title">Workflow — Attaque Live</p>
+
+        <!-- STEP 1 : Sélection de la cible -->
+        <div class="step active" id="step1">
+            <div class="step-header">
+                <span class="step-badge">1</span>
+                <span class="step-label">Sélectionner la Cible</span>
+            </div>
+            <p class="step-desc">
+                Choisir l'identité à usurper. Le patch lunettes sera optimisé pour tromper
+                FaceNet et te faire reconnaître comme cette personne.
+            </p>
+            <select id="target-select">
+                <option value="">Chargement des identités…</option>
+            </select>
+        </div>
+
+        <!-- STEP 2 : Génération du patch -->
+        <div class="step disabled" id="step2">
+            <div class="step-header">
+                <span class="step-badge">2</span>
+                <span class="step-label">Générer le Patch PGD</span>
+            </div>
+            <p class="step-desc">
+                Le patch est calculé via <strong>40 itérations PGD</strong> (~3s).
+                Il sera mis en cache — pas besoin de regénérer tant que la cible ne change pas.
+            </p>
+            <button id="btn-generate" class="btn btn-generate" onclick="generatePatch()">
+                ⚡ GÉNÉRER LE PATCH
+            </button>
+            <div id="progress-wrap" class="progress-wrap" style="display:none">
+                <div class="progress-label">
+                    <span>Optimisation PGD en cours…</span>
+                    <span id="prog-pct"></span>
+                </div>
+                <div class="progress-bg">
+                    <div class="progress-fill indeterminate" id="prog-bar"></div>
+                </div>
+            </div>
+            <div style="margin-top:12px; display:flex; justify-content:center;">
+                <span class="status-badge badge-idle" id="patch-badge">
+                    <span class="dot"></span> EN ATTENTE
+                </span>
+            </div>
+        </div>
+
+        <!-- STEP 3 : Attaque live -->
+        <div class="step disabled" id="step3">
+            <div class="step-header">
+                <span class="step-badge">3</span>
+                <span class="step-label">Attaque Live</span>
+            </div>
+            <p class="step-desc">
+                Place-toi devant la caméra. Le patch lunettes sera appliqué sur ton visage
+                en temps réel et FaceNet devrait te reconnaître comme la cible.
+            </p>
+            <button id="btn-attack-live" class="btn btn-attack" onclick="toggleLiveAttack()">
+                🎯 LANCER L'ATTAQUE LIVE
+            </button>
+            <button id="btn-stop" class="btn btn-stop" onclick="stopAttack()" style="display:none">
+                ⬛ ARRÊTER L'ATTAQUE
+            </button>
+            <div style="margin-top:14px;">
+                <div class="alert-info">
+                    Le patch est appliqué <strong>&lt;5ms/frame</strong> sans recalcul.
+                    La reconnaissance se fait via FaceNet local + HF Space.
+                </div>
+            </div>
+        </div>
+
+        <!-- Log -->
+        <div class="card" style="margin-top:6px;">
+            <div class="section-title">Journal</div>
+            <div class="log-box" id="log-box">
+                <div class="log-entry ok"><span class="ts">[SYS]</span> Interface initialisée.</div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ── COLONNE DROITE : vidéo + stats ────────────────────────── -->
+    <main>
+
+        <!-- Flux vidéo live -->
+        <div class="card">
+            <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>Flux Vidéo — Caméra Live</span>
+                <span class="status-badge badge-idle" id="live-status-badge">
+                    <span class="dot"></span> INACTIF
+                </span>
+            </div>
+
+            <div class="video-wrap">
+                <img src="/video_feed" alt="Flux caméra" id="live-feed">
+                <div class="scanning-overlay"></div>
+                <div class="scan-line"></div>
+                <div class="video-hud">
+                    <div class="video-hud-top">
+                        <span class="hud-badge hud-rec">● REC</span>
+                        <span class="hud-badge hud-patch-active" id="hud-patch" style="display:none">
+                            🕶️ PATCH ACTIF
+                        </span>
+                    </div>
+                    <div class="video-hud-bottom">
+                        <div class="hud-identity">
+                            <div class="hud-identity-label">IDENTITÉ RECONNUE</div>
+                            <div class="hud-identity-name" id="hud-name">SCANNING…</div>
+                            <div class="hud-identity-conf" id="hud-conf">Similarité : —</div>
+                            <span class="hud-identity-access access-denied" id="hud-access">DENIED</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="metric-grid">
+                <div class="metric-box">
+                    <div class="metric-val" id="m-fps">—</div>
+                    <div class="metric-lab">FPS</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-val" id="m-conf">—</div>
+                    <div class="metric-lab">Similarité</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-val" id="m-anom">—</div>
+                    <div class="metric-lab">Score FFT</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prévisualisation du masque + Test statique -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:0;">
+
+            <!-- Masque -->
+            <div class="card">
+                <div class="section-title">Masque Lunettes (160×160)</div>
+                <div class="mask-preview">
+                    <canvas id="mask-canvas" width="160" height="160"></canvas>
+                    <span class="mask-label">ZONE ADVERSARIALE</span>
+                </div>
+                <p style="font-size:0.8rem; color:var(--text-muted); margin-top:10px; line-height:1.5;">
+                    Les zones <span style="color:#00ffcc">cyan</span> représentent les pixels modifiés par le patch PGD.
+                    Le reste du visage est intact.
+                </p>
+            </div>
+
+            <!-- Test statique -->
+            <div class="card">
+                <div class="section-title">Test sur Image Statique</div>
+                <p class="step-desc" style="margin-bottom:14px;">
+                    Tester le patch sur une photo — compare l'identité avant / après application.
+                </p>
+                <div class="file-input-wrap">
+                    <div class="file-icon">📷</div>
+                    <div class="file-hint">Déposer une image ou cliquer</div>
+                    <div id="file-name">Aucun fichier sélectionné</div>
+                    <input type="file" id="static-file" accept="image/*" onchange="onFileChange(this)">
+                </div>
+                <button class="btn btn-generate" style="margin-top:14px;" onclick="testStatic()" id="btn-static">
+                    🔬 TESTER LE PATCH
+                </button>
+                <div id="static-result" style="margin-top:12px;"></div>
+            </div>
+        </div>
+
+        <!-- Résultat image statique -->
+        <div class="card" id="result-section">
+            <div class="section-title">Résultat — Comparaison Avant / Après</div>
+            <div class="result-compare">
+                <div class="compare-box">
+                    <div style="font-family:var(--font-data); font-size:0.75rem; color:var(--text-muted); margin-bottom:6px;">AVANT (original)</div>
+                    <div style="background:rgba(0,0,0,0.5); border-radius:8px; border:1px solid var(--border); padding:12px; font-family:var(--font-data); font-size:0.85rem;" id="before-info">—</div>
+                </div>
+                <div class="compare-box">
+                    <div style="font-family:var(--font-data); font-size:0.75rem; color:var(--text-muted); margin-bottom:6px;">APRÈS (avec patch)</div>
+                    <div style="background:rgba(0,0,0,0.5); border-radius:8px; border:1px solid var(--border); padding:12px; font-family:var(--font-data); font-size:0.85rem;" id="after-info">—</div>
+                </div>
+            </div>
+            <img id="result-img" class="result-img" src="" alt="Résultat" style="display:none">
+        </div>
+
+    </main>
+</div>
+
+<script>
+// ── État local ──────────────────────────────────────────────────────
+let liveActive     = false;
+let patchReady     = false;
+let patchGenRunning = false;
+let selectedTarget = '';
+let statusInterval = null;
+
+// ── Utilitaires ─────────────────────────────────────────────────────
+function ts() {
+    return new Date().toLocaleTimeString('fr-FR', {hour12: false});
+}
+function addLog(msg, type = '') {
+    const box = document.getElementById('log-box');
+    const div = document.createElement('div');
+    div.className = 'log-entry ' + type;
+    div.innerHTML = `<span class="ts">[${ts()}]</span> ${msg}`;
+    box.prepend(div);
+    if (box.children.length > 30) box.removeChild(box.lastChild);
+}
+
+// ── Chargement des identités enrôlées ───────────────────────────────
+async function loadEnrolled() {
+    try {
+        const r = await fetch('/api/enrolled_list');
+        const d = await r.json();
+        const sel = document.getElementById('target-select');
+        sel.innerHTML = '<option value="">— Sélectionner une cible —</option>';
+        (d.enrolled || []).forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = name; opt.textContent = name;
+            sel.appendChild(opt);
+        });
+        addLog(`${d.count} identité(s) enrôlée(s) chargée(s).`, 'ok');
+    } catch (e) {
+        addLog('Erreur chargement identités : ' + e.message, 'err');
+    }
+}
+
+// ── Sélection de la cible ────────────────────────────────────────────
+document.getElementById('target-select').addEventListener('change', function() {
+    selectedTarget = this.value;
+    if (selectedTarget) {
+        document.getElementById('step2').classList.remove('disabled');
+        document.getElementById('step2').classList.add('active');
+        document.getElementById('step1').classList.remove('active');
+        document.getElementById('step1').classList.add('done');
+        addLog(`Cible sélectionnée : ${selectedTarget}`);
+    } else {
+        document.getElementById('step2').classList.add('disabled');
+        document.getElementById('step2').classList.remove('active');
+        document.getElementById('step1').classList.add('active');
+        document.getElementById('step1').classList.remove('done');
+    }
+});
+
+// ── Génération du patch PGD ─────────────────────────────────────────
+async function generatePatch() {
+    if (!selectedTarget) { addLog('Sélectionner une cible d\'abord.', 'warn'); return; }
+    if (patchGenRunning)  { addLog('Génération déjà en cours…', 'warn'); return; }
+
+    patchGenRunning = true;
+    setPatchBadge('working');
+    document.getElementById('btn-generate').disabled = true;
+    document.getElementById('progress-wrap').style.display = 'block';
+    document.getElementById('prog-bar').classList.add('indeterminate');
+
+    addLog(`Lancement de la génération PGD pour « ${selectedTarget} »…`);
+
+    try {
+        const r = await fetch('/api/toggle_patch_live', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({active: true, target: selectedTarget})
+        });
+        const d = await r.json();
+        if (!d.success) {
+            addLog('Erreur : ' + d.error, 'err');
+            resetGenerateUI();
+            return;
+        }
+
+        addLog(d.message, 'ok');
+
+        if (d.generating) {
+            // Polling jusqu'à ce que le patch soit prêt
+            pollPatchReady();
+        } else {
+            // Patch depuis le cache, prêt immédiatement
+            onPatchReady();
+        }
+    } catch(e) {
+        addLog('Erreur réseau : ' + e.message, 'err');
+        resetGenerateUI();
+    }
+}
+
+function pollPatchReady() {
+    const poll = setInterval(async () => {
+        try {
+            const r = await fetch('/api/patch_status');
+            const d = await r.json();
+            if (d.ready && !d.generating) {
+                clearInterval(poll);
+                onPatchReady();
+            } else if (!d.generating && !d.ready && !d.active) {
+                // Erreur de génération
+                clearInterval(poll);
+                addLog('Génération échouée — vérifiez les logs serveur.', 'err');
+                resetGenerateUI();
+            }
+        } catch(e) { /* continuer */ }
+    }, 800);
+}
+
+function onPatchReady() {
+    patchReady     = true;
+    patchGenRunning = false;
+    setPatchBadge('ready');
+    document.getElementById('btn-generate').disabled = false;
+    document.getElementById('progress-wrap').style.display = 'none';
+    document.getElementById('prog-bar').classList.remove('indeterminate');
+
+    document.getElementById('step2').classList.remove('active');
+    document.getElementById('step2').classList.add('done');
+    document.getElementById('step3').classList.remove('disabled');
+    document.getElementById('step3').classList.add('active');
+
+    addLog(`✅ Patch PGD prêt pour « ${selectedTarget} » — Lancer l'attaque !`, 'ok');
+}
+
+function resetGenerateUI() {
+    patchGenRunning = false;
+    setPatchBadge('idle');
+    document.getElementById('btn-generate').disabled = false;
+    document.getElementById('progress-wrap').style.display = 'none';
+    document.getElementById('prog-bar').classList.remove('indeterminate');
+}
+
+function setPatchBadge(state) {
+    const el = document.getElementById('patch-badge');
+    const classes = { idle: 'badge-idle', working: 'badge-working', ready: 'badge-ready' };
+    const labels  = { idle: 'EN ATTENTE', working: 'GÉNÉRATION…', ready: 'PRÊT ✓' };
+    el.className = 'status-badge ' + (classes[state] || 'badge-idle');
+    el.innerHTML = `<span class="dot${state==='working' ? ' blink' : ''}"></span> ${labels[state] || 'EN ATTENTE'}`;
+}
+
+// ── Attaque live ─────────────────────────────────────────────────────
+async function toggleLiveAttack() {
+    if (!patchReady) { addLog('Générer le patch d\'abord (étape 2).', 'warn'); return; }
+    liveActive = !liveActive;
+
+    const btn     = document.getElementById('btn-attack-live');
+    const btnStop = document.getElementById('btn-stop');
+
+    if (liveActive) {
+        // Activer l'attaque (patch déjà prêt → cache hit)
+        try {
+            const r = await fetch('/api/toggle_patch_live', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({active: true, target: selectedTarget})
+            });
+            const d = await r.json();
+            if (!d.success) { addLog('Erreur : ' + d.error, 'err'); liveActive = false; return; }
+        } catch(e) { addLog('Erreur réseau : ' + e.message, 'err'); liveActive = false; return; }
+
+        btn.textContent = '⏸ PAUSE ATTAQUE';
+        btn.classList.add('active');
+        btnStop.style.display = 'block';
+        document.getElementById('hud-patch').style.display = 'inline-flex';
+        document.getElementById('live-status-badge').className = 'status-badge badge-active';
+        document.getElementById('live-status-badge').innerHTML = '<span class="dot blink"></span> ATTAQUE ACTIVE';
+        
+        // Cacher la section de résultat statique pour éviter les redondances visuelles
+        document.getElementById('result-section').classList.remove('visible');
+        
+        addLog(`🎯 Attaque lunettes LIVE activée sur « ${selectedTarget} »`, 'warn');
+    } else {
+        // Pause (désactiver sans vider le cache)
+        await disableAttack(false);
+        btn.textContent = '🎯 REPRENDRE L\'ATTAQUE';
+        btn.classList.remove('active');
+        document.getElementById('hud-patch').style.display = 'none';
+        document.getElementById('live-status-badge').className = 'status-badge badge-ready';
+        document.getElementById('live-status-badge').innerHTML = '<span class="dot"></span> EN PAUSE';
+        addLog('⏸ Attaque mise en pause.');
+    }
+}
+
+async function stopAttack() {
+    if (!liveActive && !patchReady) return;
+    liveActive = false;
+    patchReady = false;
+
+    await disableAttack(true);
+
+    document.getElementById('btn-attack-live').textContent = '🎯 LANCER L\'ATTAQUE LIVE';
+    document.getElementById('btn-attack-live').classList.remove('active');
+    document.getElementById('btn-stop').style.display = 'none';
+    document.getElementById('hud-patch').style.display = 'none';
+    document.getElementById('live-status-badge').className = 'status-badge badge-idle';
+    document.getElementById('live-status-badge').innerHTML = '<span class="dot"></span> INACTIF';
+    setPatchBadge('idle');
+
+    // Réinitialiser les étapes
+    document.getElementById('step2').classList.remove('done');
+    document.getElementById('step2').classList.add('active');
+    document.getElementById('step3').classList.remove('active');
+    document.getElementById('step3').classList.add('disabled');
+
+    // Cacher la section de résultat statique
+    document.getElementById('result-section').classList.remove('visible');
+
+    addLog('⬛ Attaque arrêtée — patch effacé du cache.', 'ok');
+}
+
+async function disableAttack(clearCache) {
+    try {
+        await fetch('/api/toggle_patch_live', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({active: false})
+        });
+    } catch(e) { /* ignore */ }
+}
+
+// ── Polling /api/status ─────────────────────────────────────────────
+async function pollStatus() {
+    try {
+        const r = await fetch('/api/status');
+        const d = await r.json();
+
+        document.getElementById('hud-name').textContent = (d.identity || 'SCANNING').toUpperCase();
+        document.getElementById('hud-conf').textContent = `Similarité : ${(d.confidence * 100).toFixed(1)}%`;
+        document.getElementById('m-fps').textContent    = d.fps || '—';
+        document.getElementById('m-conf').textContent   = `${(d.confidence * 100).toFixed(0)}%`;
+        document.getElementById('m-anom').textContent   = (d.anomaly_score || 0).toFixed(3);
+
+        const access = document.getElementById('hud-access');
+        if (d.access_level && d.access_level !== 'DENIED') {
+            access.className   = 'hud-identity-access access-granted';
+            access.textContent = d.access_level;
+        } else {
+            access.className   = 'hud-identity-access access-denied';
+            access.textContent = 'DENIED';
+        }
+
+        // Sync état live si changé côté serveur
+        if (!d.glasses_attack_active && liveActive) {
+            // Désactivé côté serveur (ex : erreur)
+            document.getElementById('hud-patch').style.display = 'none';
+        }
+    } catch(e) { /* ignore */ }
+}
+
+// ── Masque canvas ───────────────────────────────────────────────────
+function drawGlassesMask() {
+    const canvas = document.getElementById('mask-canvas');
+    const ctx    = canvas.getContext('2d');
+    const W = 160, H = 160;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#0a0a12';
+    ctx.fillRect(0, 0, W, H);
+
+    const cx   = W / 2;
+    const ey   = H * 0.38;
+    const eRy  = H * 0.10;
+    const eRx  = W * 0.18;
+    const eSep = W * 0.22;
+    const lx   = cx - eSep;
+    const rx   = cx + eSep;
+
+    ctx.fillStyle    = 'rgba(0, 229, 255, 0.6)';
+    ctx.strokeStyle  = '#00e5ff';
+    ctx.lineWidth    = 1.5;
+    ctx.shadowColor  = '#00e5ff';
+    ctx.shadowBlur   = 8;
+
+    // Verre gauche
+    ctx.beginPath();
+    ctx.ellipse(lx, ey, eRx, eRy, 0, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+
+    // Verre droit
+    ctx.beginPath();
+    ctx.ellipse(rx, ey, eRx, eRy, 0, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+
+    // Pont
+    const bY1 = ey - eRy * 0.3, bY2 = ey + eRy * 0.3;
+    const bX1 = lx + eRx, bX2 = rx - eRx;
+    if (bX2 > bX1) { ctx.fillRect(bX1, bY1, bX2 - bX1, bY2 - bY1); }
+
+    // Branches
+    const thick = H * 0.045;
+    const bY    = ey - thick / 2;
+    ctx.fillRect(0, bY, lx - eRx, thick);
+    ctx.fillRect(rx + eRx, bY, W - (rx + eRx), thick);
+
+    // Silhouette visage (guide)
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.shadowBlur  = 0;
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.ellipse(cx, H * 0.48, W * 0.38, H * 0.46, 0, 0, Math.PI * 2);
+    ctx.stroke();
+}
+
+// ── Test statique ────────────────────────────────────────────────────
+function onFileChange(input) {
+    const name = input.files[0] ? input.files[0].name : 'Aucun fichier';
+    document.getElementById('file-name').textContent = name;
+}
+
+async function testStatic() {
+    const fileInput = document.getElementById('static-file');
+    const target    = document.getElementById('target-select').value;
+    if (!fileInput.files.length) { addLog('Sélectionner une image.', 'warn'); return; }
+
+    const btn = document.getElementById('btn-static');
+    btn.disabled = true;
+    btn.textContent = '⏳ Traitement…';
+
+    const fd = new FormData();
+    fd.append('image',  fileInput.files[0]);
+    fd.append('target', target || 'Manager_Demo');
+
+    try {
+        const r = await fetch('/api/generate_glasses_attack', {method:'POST', body: fd});
+        const d = await r.json();
+
+        if (d.success) {
+            document.getElementById('before-info').innerHTML =
+                `<span style="color:var(--text-main)">${d.before.identity}</span><br>` +
+                `<span style="color:var(--text-muted)">Conf : ${(d.before.confidence*100).toFixed(1)}%</span>`;
+            document.getElementById('after-info').innerHTML =
+                `<span style="color:var(--ok)">${d.after.identity}</span><br>` +
+                `<span style="color:var(--text-muted)">Conf : ${(d.after.confidence*100).toFixed(1)}%</span><br>` +
+                `<span style="color:var(--accent)">${d.after.access_level}</span>`;
+            const img = document.getElementById('result-img');
+            img.src = 'data:image/jpeg;base64,' + d.after.image_base64;
+            img.style.display = 'block';
+            document.getElementById('result-section').classList.add('visible');
+            addLog(`Test statique : ${d.before.identity} → ${d.after.identity} ✓`, 'ok');
+        } else {
+            addLog('Erreur test : ' + d.error, 'err');
+        }
+    } catch(e) {
+        addLog('Erreur réseau : ' + e.message, 'err');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '🔬 TESTER LE PATCH';
+    }
+}
+
+// ── Init ─────────────────────────────────────────────────────────────
+drawGlassesMask();
+loadEnrolled();
+statusInterval = setInterval(pollStatus, 500);
+</script>
+</body>
+</html>
