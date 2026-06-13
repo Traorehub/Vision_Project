@@ -1,0 +1,14 @@
+# Dépendances communes SecurAI (sans PyTorch)
+# Installées via requirements-gpu.txt ou requirements-cpu.txt
+
+numpy>=2.1.0,<3.0.0
+Pillow>=10.2.0
+opencv-python>=4.9.0
+ultralytics>=8.2.0
+facenet-pytorch>=2.5.0
+scikit-learn>=1.4.0
+joblib>=1.3.0
+flask>=3.0.0
+werkzeug>=3.0.0
+requests>=2.31.0
+tqdm>=4.66.0

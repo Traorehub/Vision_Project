@@ -1,0 +1,30 @@
+# =============================================================
+#  SecurAI — Dépendances du Serveur d'inférence GPU
+# =============================================================
+#
+#  INSTRUCTIONS D'INSTALLATION :
+#  1. Crée un environnement virtuel :
+#       python -m venv .venv
+#       .venv\Scripts\activate    (Windows)
+#       source .venv/bin/activate  (Linux/Mac)
+#
+#  2. Installe PyTorch avec support CUDA (pour activer ton GPU Nvidia) :
+#     → Vérifie ta version CUDA avec : nvidia-smi
+#     → Pour CUDA 12.1 :
+#       pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#     → Pour CUDA 11.8 :
+#       pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+#     → Si pas de GPU (CPU uniquement) :
+#       pip install torch torchvision
+#
+#  3. Installe le reste des dépendances :
+#       pip install -r requirements_server.txt
+# =============================================================
+
+flask>=3.0.0
+numpy>=1.24.0
+opencv-python-headless>=4.8.0
+facenet-pytorch==2.6.0
+scikit-learn>=1.3.0
+joblib>=1.3.0
+# Note : torch et torchvision doivent être installés SÉPARÉMENT (voir instructions ci-dessus)

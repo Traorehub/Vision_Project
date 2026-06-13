@@ -1,0 +1,25 @@
+# SecurAI - PC GPU NVIDIA + Python 3.14
+# Installation (venv active, depuis Vision_Project) :
+#   pip install -r requirements_fianl.txt
+#
+# Alternative identique :
+#   pip install -r securai_store\requirements_gpu.txt
+#
+# Lancer : python securai_store\app_gpu_direct.py
+
+--extra-index-url https://download.pytorch.org/whl/cu126
+
+torch>=2.9.0
+torchvision>=0.24.0
+
+numpy>=2.1.0,<3.0.0
+Pillow>=10.2.0
+opencv-python>=4.9.0
+ultralytics>=8.2.0
+facenet-pytorch>=2.5.0
+scikit-learn>=1.4.0
+joblib>=1.3.0
+flask>=3.0.0
+werkzeug>=3.0.0
+requests>=2.31.0
+tqdm>=4.66.0

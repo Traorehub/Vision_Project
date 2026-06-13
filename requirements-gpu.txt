@@ -1,0 +1,28 @@
+# SecurAI — PC GPU NVIDIA + Python 3.14
+#
+# IMPORTANT : torch 2.3+cu121 ne supporte PAS Python 3.14.
+#             Il faut PyTorch 2.9+ avec CUDA 12.6 minimum (cu126).
+#
+# Installation (racine Vision_Project, venv .venv active) :
+#   python -m venv .venv
+#   .venv\Scripts\activate
+#   python --version          # → 3.14.x
+#   pip install --upgrade pip
+#   pip install -r requirements-gpu.txt
+#
+# Si cu126 échoue, essayer cu130 (drivers NVIDIA récents) :
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
+#   pip install -r requirements-base.txt
+#
+# Vérifier :
+#   python -c "import numpy,torch; print(numpy.__version__); print(torch.__version__); print(torch.cuda.is_available())"
+#
+# Lancer :
+#   python securai_store\app_gpu_direct.py
+
+--extra-index-url https://download.pytorch.org/whl/cu126
+
+torch>=2.9.0
+torchvision>=0.24.0
+
+-r requirements-base.txt
